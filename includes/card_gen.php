@@ -5,11 +5,35 @@ function generate_card(string $bg_path, array $qso, array $template, string $out
     // Load background
     $info = @getimagesize($bg_path);
     if (!$info) return false;
-    $img = match($info[2]) {
+
+    $src_type = $info[2];
+    $raw = match($src_type) {
         IMAGETYPE_JPEG => @imagecreatefromjpeg($bg_path),
         IMAGETYPE_PNG  => @imagecreatefrompng($bg_path),
         default        => false,
     };
+    if (!$raw) return false;
+
+    $out_ext = strtolower(pathinfo($out_path, PATHINFO_EXTENSION));
+
+    // If source is PNG with alpha and output is JPG, composite over white
+    if ($src_type === IMAGETYPE_PNG && $out_ext !== 'png') {
+        $w   = imagesx($raw);
+        $h   = imagesy($raw);
+        $img = imagecreatetruecolor($w, $h);
+        $white = imagecolorallocate($img, 255, 255, 255);
+        imagefill($img, 0, 0, $white);
+        imagealphablending($raw, true);
+        imagecopy($img, $raw, 0, 0, 0, 0, $w, $h);
+        imagedestroy($raw);
+    } else {
+        $img = $raw;
+        if ($src_type === IMAGETYPE_PNG) {
+            imagealphablending($img, true);
+            imagesavealpha($img, true);
+        }
+    }
+
     if (!$img) return false;
 
     $fields = $template['fields'] ?? [];
@@ -109,7 +133,9 @@ function build_zip(array $files, string $zip_path): bool {
 }
 
 function generate_preview(string $bg_path, array $qso, array $template): ?string {
-    $tmp = OUTPUT_DIR . 'preview_' . session_id() . '.jpg';
+    $info = @getimagesize($bg_path);
+    $ext  = ($info && $info[2] === IMAGETYPE_PNG) ? 'png' : 'jpg';
+    $tmp  = OUTPUT_DIR . 'preview_' . session_id() . '.' . $ext;
     if (generate_card($bg_path, $qso, $template, $tmp)) {
         return $tmp;
     }
