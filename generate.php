@@ -10,6 +10,14 @@ $page_title = t('nav_generate');
 $step  = (int)($_GET['step'] ?? $_SESSION['gen_step'] ?? 1);
 $error = '';
 
+// Limpiar sesión al entrar a step 1 por GET (evita arrancar a mitad del flujo al recargar)
+if ($step === 1 && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    foreach (['gen_qsos','gen_bg','gen_step','gen_template','gen_summary','gen_adif_name',
+              'gen_uuid','gen_zip','gen_files','gen_zip_name'] as $k) {
+        unset($_SESSION[$k]);
+    }
+}
+
 // ── Step 1 POST: upload ADIF + background ─────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload') {
     verify_csrf();
@@ -295,9 +303,16 @@ document.getElementById('bg-input').addEventListener('change', function() {
     </div>
     <div class="text-muted small mt-2 text-center">
       <i class="bi bi-info-circle me-1"></i>
-      Preview uses first QSO: <strong><?= h($first['CALL'] ?? '') ?></strong>
-      <?= $first ? '· ' . fmt_date_adif($first['QSO_DATE'] ?? '') . ' · ' . ($first['BAND'] ?? '') . ' · ' . ($first['MODE'] ?? '') : '' ?>
+      <?= t('preview_info', [
+          'call' => h($first['CALL'] ?? '—'),
+          'date' => h(fmt_date_adif($first['QSO_DATE'] ?? '')),
+          'band' => h($first['BAND'] ?? '—'),
+          'mode' => h($first['MODE'] ?? '—'),
+      ]) ?>
     </div>
+
+    <!-- Warnings validación -->
+    <div id="step2-warnings" class="mt-3 d-none"></div>
   </div>
 </div>
 
@@ -320,7 +335,7 @@ function loadPreview() {
       document.getElementById('preview-loading').classList.add('d-none');
       if (d.ok) {
         const img = document.getElementById('preview-img');
-        img.src = d.url + '?t=' + Date.now();
+        img.src = 'data:' + d.mime + ';base64,' + d.data;
         img.style.display = '';
       } else {
         document.getElementById('preview-placeholder').style.display = '';
@@ -336,6 +351,55 @@ function loadPreview() {
 document.getElementById('design-form').addEventListener('input', triggerPreview);
 // Initial preview on page load
 loadPreview();
+
+// Validación antes de avanzar al step 3
+document.getElementById('design-form').addEventListener('submit', function(e) {
+  const warnings = [];
+  const visibles = document.querySelectorAll('input[name^="vis_"]:checked');
+  if (visibles.length === 0) {
+    e.preventDefault();
+    document.getElementById('step2-warnings').innerHTML =
+      '<div class="alert alert-danger"><?= addslashes(t('warn_no_visible')) ?></div>';
+    document.getElementById('step2-warnings').classList.remove('d-none');
+    return;
+  }
+  const callVis = document.querySelector('input[name="vis_CALL"]');
+  if (!callVis || !callVis.checked) warnings.push('<?= addslashes(t('warn_no_call')) ?>');
+
+  // Fecha inválida del primer QSO
+  const dateRaw = '<?= addslashes($first['QSO_DATE'] ?? '') ?>';
+  if (dateRaw && (dateRaw.length !== 8 || isNaN(Number(dateRaw)))) {
+    warnings.push('<?= addslashes(t('warn_date_invalid', ['val' => $first['QSO_DATE'] ?? ''])) ?>');
+  }
+
+  // Campos muy cerca: recoge x,y de todos los visibles y detecta pares con distancia < 20px
+  const coords = [];
+  document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
+    const f = cb.name.replace('vis_', '');
+    const x = parseInt(document.querySelector('[name="x_'+f+'"]')?.value || '0');
+    const y = parseInt(document.querySelector('[name="y_'+f+'"]')?.value || '0');
+    coords.push({f, x, y});
+  });
+  let overlap = false;
+  for (let i = 0; i < coords.length && !overlap; i++) {
+    for (let j = i+1; j < coords.length && !overlap; j++) {
+      if (Math.abs(coords[i].x - coords[j].x) < 20 && Math.abs(coords[i].y - coords[j].y) < 20) overlap = true;
+    }
+  }
+  if (overlap) warnings.push('<?= addslashes(t('warn_overlap')) ?>');
+
+  if (warnings.length > 0) {
+    e.preventDefault();
+    let html = warnings.map(w => '<div class="alert alert-warning py-2 small mb-2">'+w+'</div>').join('');
+    html += '<button type="submit" class="btn btn-warning btn-sm"><?= addslashes(t('warn_continue')) ?></button>';
+    const el = document.getElementById('step2-warnings');
+    el.innerHTML = html;
+    el.classList.remove('d-none');
+    el.scrollIntoView({behavior:'smooth'});
+    // Reactivar submit al presionar "continuar de todas formas"
+    el.querySelector('button').addEventListener('click', () => document.getElementById('design-form').submit());
+  }
+});
 </script>
 
 <?php /* ═══════════════════════════════ STEP 3 ══════════════════════════════ */ ?>
@@ -355,10 +419,20 @@ loadPreview();
       </div>
     </div>
 
-    <div id="gen-section">
-      <button class="btn btn-warning btn-lg w-100 fw-semibold" id="btn-generate" onclick="generateBatch()">
-        <i class="bi bi-magic me-2"></i><?= t('generate_btn') ?>
-      </button>
+    <!-- Selector de acción -->
+    <div id="action-section">
+      <p class="fw-semibold text-center mb-3"><?= t('action_choice') ?></p>
+      <div class="d-grid gap-2">
+        <button class="btn btn-warning btn-lg fw-semibold" onclick="generateBatch('zip')">
+          <i class="bi bi-file-zip me-2"></i><?= t('action_zip') ?>
+        </button>
+        <button class="btn btn-primary btn-lg fw-semibold" onclick="generateBatch('email')">
+          <i class="bi bi-envelope me-2"></i><?= t('action_email') ?>
+        </button>
+        <button class="btn btn-outline-secondary btn-lg fw-semibold" onclick="generateBatch('both')">
+          <i class="bi bi-magic me-2"></i><?= t('action_both') ?>
+        </button>
+      </div>
     </div>
 
     <div id="gen-progress" class="d-none text-center py-3">
@@ -367,15 +441,15 @@ loadPreview();
     </div>
 
     <div id="gen-done" class="d-none">
-      <a id="dl-link" href="#" class="btn btn-success btn-lg w-100 fw-semibold mb-3" download>
-        <i class="bi bi-download me-2"></i><span id="dl-label"><?= t('download_btn', ['n' => $summary['total'] ?? 0]) ?></span>
+      <a id="dl-link" href="#" class="btn btn-success btn-lg w-100 fw-semibold mb-3 d-none" download>
+        <i class="bi bi-download me-2"></i><span id="dl-label"></span>
       </a>
-      <a href="<?= APP_URL ?>/generate.php" class="btn btn-outline-secondary w-100">
-        <i class="bi bi-plus me-1"></i>Generate another batch
+      <a href="<?= APP_URL ?>/generate.php" class="btn btn-outline-secondary w-100 mt-2">
+        <i class="bi bi-plus me-1"></i>Nueva generación
       </a>
     </div>
 
-    <!-- Email section (shown after generation) -->
+    <!-- Email section -->
     <div id="email-section" class="d-none mt-4 border-top pt-4">
       <h6 class="fw-semibold"><i class="bi bi-envelope me-2 text-primary"></i><?= t('email_section') ?></h6>
       <p class="small text-muted"><?= t('email_help') ?></p>
@@ -388,6 +462,17 @@ loadPreview();
         <label class="form-label small fw-semibold"><?= t('email_subject') ?></label>
         <input type="text" id="email-subject" class="form-control form-control-sm"
                value="<?= h(t('email_subject_def', ['callsign' => usuario_actual()['callsign'] ?? 'N0CALL'])) ?>">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold"><?= t('email_body_label') ?></label>
+        <textarea id="email-body" class="form-control form-control-sm" rows="5"><?= h(t('email_body_def', [
+            'name'     => '{name}',
+            'date'     => '{date}',
+            'band'     => '{band}',
+            'mode'     => '{mode}',
+            'callsign' => usuario_actual()['callsign'] ?? 'N0CALL',
+        ])) ?></textarea>
+        <div class="form-text small"><?= t('lang_switch_code') === 'en' ? 'Use {name}, {date}, {band}, {mode} as placeholders.' : 'Usá {name}, {date}, {band}, {mode} como variables.' ?></div>
       </div>
       <div id="email-contacts" class="mb-3"></div>
       <button class="btn btn-primary w-100" id="btn-send-emails" onclick="sendEmails()">
@@ -428,12 +513,13 @@ loadPreview();
 
 <script>
 let batchUuid = null;
+let batchMode = 'zip';
 const qsos = <?= json_encode(array_map(fn($q) => ['call' => $q['CALL'] ?? '', 'name' => $q['NAME'] ?? '', 'email' => ''], $qsos)) ?>;
 
-function generateBatch() {
-  document.getElementById('btn-generate').disabled = true;
+function generateBatch(mode) {
+  batchMode = mode || 'zip';
+  document.getElementById('action-section').classList.add('d-none');
   document.getElementById('gen-progress').classList.remove('d-none');
-  document.getElementById('gen-section').classList.add('d-none');
   fetch('<?= APP_URL ?>/api/generate.php', {
     method: 'POST',
     headers: {'X-CSRF-Token': '<?= csrf_token() ?>','Content-Type':'application/json'},
@@ -444,14 +530,22 @@ function generateBatch() {
     document.getElementById('gen-progress').classList.add('d-none');
     if (d.ok) {
       batchUuid = d.uuid;
-      document.getElementById('dl-link').href = '<?= APP_URL ?>/download.php?uuid=' + d.uuid;
-      document.getElementById('dl-label').textContent = '<?= addslashes(t('download_btn', ['n' => '{n}'])) ?>'.replace('{n}', d.n);
+      const dlLink  = document.getElementById('dl-link');
+      const dlLabel = document.getElementById('dl-label');
+      dlLink.href   = '<?= APP_URL ?>/download.php?uuid=' + d.uuid;
+      dlLabel.textContent = '<?= addslashes(t('download_btn', ['n' => '{n}'])) ?>'.replace('{n}', d.n);
+
       document.getElementById('gen-done').classList.remove('d-none');
-      buildEmailContacts();
-      document.getElementById('email-section').classList.remove('d-none');
+
+      if (batchMode === 'zip' || batchMode === 'both') {
+        dlLink.classList.remove('d-none');
+      }
+      if (batchMode === 'email' || batchMode === 'both') {
+        buildEmailContacts();
+        document.getElementById('email-section').classList.remove('d-none');
+      }
     } else {
-      document.getElementById('gen-section').classList.remove('d-none');
-      document.getElementById('btn-generate').disabled = false;
+      document.getElementById('action-section').classList.remove('d-none');
       alert(d.error || '<?= addslashes(t('err_generate')) ?>');
     }
   });
@@ -459,33 +553,60 @@ function generateBatch() {
 
 function buildEmailContacts() {
   const el = document.getElementById('email-contacts');
-  let html = '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th>Callsign</th><th>Email</th></tr></thead><tbody>';
   const seen = {};
+  const rows = [];
   qsos.forEach(q => {
     if (seen[q.call]) return; seen[q.call] = 1;
-    html += '<tr><td class="fw-semibold">' + q.call + '</td><td><input type="email" class="form-control form-control-sm email-dest" data-call="' + q.call + '" data-name="' + (q.name||q.call) + '" placeholder="(skip)"></td></tr>';
+    rows.push(q);
+  });
+  let html = '<div class="mb-2 d-flex gap-2">';
+  html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDests(\'all\')"><?= addslashes(t('select_all')) ?></button>';
+  html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDests(\'none\')"><?= addslashes(t('select_none')) ?></button>';
+  html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDests(\'invert\')"><?= addslashes(t('select_invert')) ?></button>';
+  html += '</div>';
+  html += '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th></th><th>Callsign</th><th>Email</th></tr></thead><tbody>';
+  rows.forEach(q => {
+    html += '<tr><td><input type="checkbox" class="form-check-input dest-chk" checked></td>';
+    html += '<td class="fw-semibold">' + q.call + '</td>';
+    html += '<td><input type="email" class="form-control form-control-sm email-dest" data-call="' + q.call + '" data-name="' + (q.name||q.call) + '" placeholder="(skip)"></td></tr>';
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
 }
 
+function selectDests(mode) {
+  const chks = document.querySelectorAll('.dest-chk');
+  chks.forEach(c => {
+    if (mode === 'all')    c.checked = true;
+    else if (mode === 'none')   c.checked = false;
+    else if (mode === 'invert') c.checked = !c.checked;
+  });
+}
+
 function sendEmails() {
   const from    = document.getElementById('email-from').value;
   const subject = document.getElementById('email-subject').value;
-  const dests   = [];
-  document.querySelectorAll('.email-dest').forEach(inp => {
-    if (inp.value) dests.push({call: inp.dataset.call, name: inp.dataset.name, email: inp.value});
+  const bodyTpl = document.getElementById('email-body').value;
+  const dests = [];
+  document.querySelectorAll('#email-contacts tbody tr').forEach(row => {
+    const chk = row.querySelector('.dest-chk');
+    const inp = row.querySelector('.email-dest');
+    if (chk && chk.checked && inp && inp.value) {
+      dests.push({call: inp.dataset.call, name: inp.dataset.name, email: inp.value});
+    }
   });
   if (!from || !dests.length) return;
   document.getElementById('btn-send-emails').disabled = true;
+  document.getElementById('btn-send-emails').textContent = '<?= addslashes(t('email_sending')) ?>';
   fetch('<?= APP_URL ?>/api/generate.php', {
     method: 'POST',
     headers: {'X-CSRF-Token': '<?= csrf_token() ?>','Content-Type':'application/json'},
-    body: JSON.stringify({action: 'send_emails', uuid: batchUuid, from, subject, dests})
+    body: JSON.stringify({action: 'send_emails', uuid: batchUuid, from, subject, body_tpl: bodyTpl, dests})
   })
   .then(r => r.json())
   .then(d => {
     document.getElementById('btn-send-emails').disabled = false;
+    document.getElementById('btn-send-emails').innerHTML = '<i class="bi bi-send me-1"></i><?= addslashes(t('email_send_btn')) ?>';
     document.getElementById('email-result').innerHTML = d.ok
       ? '<div class="alert alert-success small py-2 mt-2">' + d.message + '</div>'
       : '<div class="alert alert-danger small py-2 mt-2">' + (d.error||'Error') + '</div>';

@@ -67,10 +67,10 @@ function gen_uuid(): string {
 
 function fmt_date_adif(string $adif_date): string {
     // ADIF: YYYYMMDD → d/m/Y
-    if (strlen($adif_date) === 8) {
+    if (strlen($adif_date) === 8 && ctype_digit($adif_date)) {
         return substr($adif_date, 6, 2) . '/' . substr($adif_date, 4, 2) . '/' . substr($adif_date, 0, 4);
     }
-    return $adif_date;
+    return $adif_date ?: '—';
 }
 
 function fmt_time_adif(string $t): string {
@@ -80,8 +80,15 @@ function fmt_time_adif(string $t): string {
 }
 
 function purge_old_output(): void {
-    foreach (glob(OUTPUT_DIR . '*.zip') as $f) {
+    if (!is_dir(OUTPUT_DIR)) return;
+    foreach (glob(OUTPUT_DIR . '*.zip') ?: [] as $f) {
         if (time() - filemtime($f) > OUTPUT_TTL) @unlink($f);
+    }
+    foreach (glob(OUTPUT_DIR . '*/') ?: [] as $dir) {
+        if (time() - filemtime($dir) > OUTPUT_TTL) {
+            array_map('unlink', glob($dir . '*') ?: []);
+            @rmdir($dir);
+        }
     }
 }
 
@@ -92,8 +99,6 @@ function allowed_fonts(): array {
         'roboto-italic' => 'Roboto Italic',
         'courier'       => 'Courier Prime',
         'courier-bold'  => 'Courier Prime Bold',
-        'opensans'      => 'Open Sans',
-        'opensans-bold' => 'Open Sans Bold',
     ];
 }
 
@@ -104,8 +109,6 @@ function font_path(string $key): string {
         'roboto-italic' => 'Roboto-Italic.ttf',
         'courier'       => 'CourierPrime-Regular.ttf',
         'courier-bold'  => 'CourierPrime-Bold.ttf',
-        'opensans'      => 'OpenSans-Regular.ttf',
-        'opensans-bold' => 'OpenSans-Bold.ttf',
     ];
     $file = FONT_DIR . ($map[$key] ?? 'Roboto-Regular.ttf');
     return file_exists($file) ? $file : (FONT_DIR . 'Roboto-Regular.ttf');

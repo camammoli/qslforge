@@ -38,6 +38,11 @@ $_flashes = get_flashes();
             <?= t('lang_switch') ?>
           </a>
         </li>
+        <li class="nav-item">
+          <button class="btn btn-sm btn-outline-danger ms-1" data-bs-toggle="modal" data-bs-target="#modalBugReport" title="<?= t('bug_report_title') ?>">
+            <i class="bi bi-bug"></i>
+          </button>
+        </li>
         <?php if (!empty($_yo)): ?>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -68,6 +73,77 @@ $_flashes = get_flashes();
     </div>
   </div>
 </nav>
+
+<!-- Modal bug report -->
+<div class="modal fade" id="modalBugReport" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1a2a3a;color:#fff">
+        <h5 class="modal-title"><i class="bi bi-bug me-2 text-warning"></i><?= t('bug_report_title') ?></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3"><?= t('bug_report_intro') ?></p>
+        <div id="bug-result" class="d-none mb-3"></div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold"><?= t('bug_report_call') ?></label>
+          <input type="text" id="bug-call" class="form-control form-control-sm" maxlength="15" placeholder="LU2MCA">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold"><?= t('bug_report_email') ?> *</label>
+          <input type="email" id="bug-email" class="form-control form-control-sm" placeholder="tu@email.com"
+                 value="<?= h($_yo['email'] ?? '') ?>">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold"><?= t('bug_report_url') ?></label>
+          <input type="text" id="bug-url" class="form-control form-control-sm" value="">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold"><?= t('bug_report_desc') ?> *</label>
+          <textarea id="bug-desc" class="form-control form-control-sm" rows="4" maxlength="2000"
+                    placeholder="<?= t('bug_report_desc') ?>…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?= t('step_back') ?></button>
+        <button type="button" class="btn btn-warning" id="btn-bug-send" onclick="sendBugReport()">
+          <i class="bi bi-send me-1"></i><?= t('bug_report_send') ?>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('bug-url').value = window.location.href;
+function sendBugReport() {
+  const email = document.getElementById('bug-email').value.trim();
+  const desc  = document.getElementById('bug-desc').value.trim();
+  if (!email || !desc) return;
+  const btn = document.getElementById('btn-bug-send');
+  btn.disabled = true;
+  fetch('<?= APP_URL ?>/api/bug_report.php', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      call: document.getElementById('bug-call').value.trim(),
+      email,
+      url:  document.getElementById('bug-url').value,
+      desc,
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    btn.disabled = false;
+    const el = document.getElementById('bug-result');
+    el.classList.remove('d-none');
+    el.innerHTML = d.ok
+      ? '<div class="alert alert-success py-2 small"><?= t('bug_report_ok') ?></div>'
+      : '<div class="alert alert-danger py-2 small"><?= t('bug_report_err') ?></div>';
+    if (d.ok) { document.getElementById('bug-desc').value = ''; }
+  })
+  .catch(() => { btn.disabled = false; });
+}
+</script>
 
 <div class="container-lg py-4">
 <?php foreach ($_flashes as $f): ?>

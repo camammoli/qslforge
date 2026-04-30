@@ -135,9 +135,12 @@ function build_zip(array $files, string $zip_path): bool {
 function generate_preview(string $bg_path, array $qso, array $template): ?string {
     $info = @getimagesize($bg_path);
     $ext  = ($info && $info[2] === IMAGETYPE_PNG) ? 'png' : 'jpg';
-    $tmp  = OUTPUT_DIR . 'preview_' . session_id() . '.' . $ext;
+    $tmp  = sys_get_temp_dir() . '/qslprev_' . session_id() . '.' . $ext;
     if (generate_card($bg_path, $qso, $template, $tmp)) {
-        return $tmp;
+        $data = base64_encode(file_get_contents($tmp));
+        @unlink($tmp);
+        return $data;
     }
+    @unlink($tmp);
     return null;
 }

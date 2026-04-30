@@ -30,7 +30,7 @@
     // Steps
     'step1_title'       => 'Upload files',
     'step2_title'       => 'Design card',
-    'step3_title'       => 'Generate & download',
+    'step3_title'       => 'Generate cards',
     'step_next'         => 'Continue',
     'step_back'         => 'Back',
 
@@ -83,7 +83,10 @@
     // Step 3
     'generate_title'    => 'Generate your QSL cards',
     'generate_info'     => 'Ready to generate {n} QSL cards.',
-    'generate_btn'      => 'Generate ZIP',
+    'action_choice'     => 'What would you like to do?',
+    'action_zip'        => 'Download ZIP',
+    'action_email'      => 'Send by email',
+    'action_both'       => 'Both',
     'generating'        => 'Generating cards…',
     'download_btn'      => 'Download ZIP ({n} cards)',
     'email_section'     => 'Send by email',
@@ -91,11 +94,12 @@
     'email_from'        => 'Your email address',
     'email_subject'     => 'Email subject',
     'email_subject_def' => 'QSL card from {callsign}',
+    'email_body_label'  => 'Email body',
     'email_body_def'    => "Dear {name},\n\nPlease find attached my QSL card confirming our QSO on {date} — {band} {mode}.\n\n73 de {callsign}",
     'email_send_btn'    => 'Send emails',
     'email_sending'     => 'Sending…',
     'email_done'        => '{n} emails sent successfully.',
-    'email_errors'      => '{n} emails failed — check the log.',
+    'email_errors'      => '{n} emails failed.',
 
     // Account
     'login_title'       => 'Log in',
@@ -136,4 +140,28 @@
     // Footer
     'footer_text'       => 'QSLforge — free QSL card generator for amateur radio operators',
     'footer_contact'    => 'Contact',
+    'footer_by'         => 'Developed by',
+    'footer_bug'        => 'Report a bug',
+
+    'preview_info'      => 'Preview: first QSO: {call} · {date} · {band} · {mode}',
+
+    'warn_no_visible'   => 'No fields are visible. Enable at least one before continuing.',
+    'warn_no_call'      => 'The callsign (CALL) field is not visible. It is recommended to include it.',
+    'warn_date_invalid' => 'The first QSO date looks invalid ({val}). Please check your ADIF file.',
+    'warn_overlap'      => 'Some fields are very close together — they may overlap on the card.',
+    'warn_continue'     => 'Continue anyway',
+
+    'bug_report_title'  => 'Report a bug',
+    'bug_report_intro'  => 'Describe the issue and we\'ll get back to you by email.',
+    'bug_report_call'   => 'Your callsign (optional)',
+    'bug_report_email'  => 'Your contact email',
+    'bug_report_desc'   => 'Description of the problem',
+    'bug_report_url'    => 'URL where it happened',
+    'bug_report_send'   => 'Send report',
+    'bug_report_ok'     => 'Report sent! Thanks for helping us improve.',
+    'bug_report_err'    => 'Error sending. Email us at web@mammoli.ar.',
+
+    'select_all'        => 'All',
+    'select_none'       => 'None',
+    'select_invert'     => 'Invert',
 ];

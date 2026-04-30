@@ -50,10 +50,11 @@ if ($action === 'generate') {
 
 // ── Send emails ───────────────────────────────────────────────────────────────
 } elseif ($action === 'send_emails') {
-    $uuid    = $body['uuid']    ?? '';
-    $from    = trim($body['from']    ?? '');
-    $subject = trim($body['subject'] ?? '');
-    $dests   = $body['dests']   ?? [];
+    $uuid     = $body['uuid']     ?? '';
+    $from     = trim($body['from']     ?? '');
+    $subject  = trim($body['subject']  ?? '');
+    $body_tpl = trim($body['body_tpl'] ?? '');
+    $dests    = $body['dests']    ?? [];
 
     if (!filter_var($from, FILTER_VALIDATE_EMAIL)) { echo json_encode(['ok'=>false,'error'=>t('err_email')]); exit; }
     if (empty($_SESSION['gen_files']))              { echo json_encode(['ok'=>false,'error'=>t('err_session')]); exit; }
@@ -77,14 +78,22 @@ if ($action === 'generate') {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) continue;
         if (!isset($file_by_call[$call])) continue;
 
-        $qso   = $file_by_call[$call]['qso'];
-        $body_text = t('email_body_def', [
+        $qso = $file_by_call[$call]['qso'];
+        $vars = [
+            '{name}'     => $name,
+            '{date}'     => fmt_date_adif($qso['QSO_DATE'] ?? ''),
+            '{band}'     => $qso['BAND'] ?? '',
+            '{mode}'     => $qso['MODE'] ?? '',
+            '{callsign}' => $callsign,
+        ];
+        $base = $body_tpl ?: t('email_body_def', [
             'name'     => $name,
             'date'     => fmt_date_adif($qso['QSO_DATE'] ?? ''),
             'band'     => $qso['BAND'] ?? '',
             'mode'     => $qso['MODE'] ?? '',
             'callsign' => $callsign,
         ]);
+        $body_text = $body_tpl ? strtr($body_tpl, $vars) : $base;
         $ok = send_qsl_email($email, $from, $subject, $body_text, $file_by_call[$call]['path'], $file_by_call[$call]['name']);
         if ($ok) $sent++; else $failed[] = $call;
     }

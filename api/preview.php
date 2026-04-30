@@ -32,7 +32,11 @@ foreach ($fields as $f) {
 $out = generate_preview($bg, $qso, $template);
 if (!$out) { echo json_encode(['ok'=>false,'error'=>t('err_generate')]); exit; }
 
+$bg_info = @getimagesize($bg);
+$mime = ($bg_info && $bg_info[2] === IMAGETYPE_PNG) ? 'image/png' : 'image/jpeg';
+
 echo json_encode([
-    'ok'  => true,
-    'url' => APP_URL . '/output/' . basename($out),
+    'ok'   => true,
+    'data' => $out,
+    'mime' => $mime,
 ]);

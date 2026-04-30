@@ -32,3 +32,17 @@ header('Content-Disposition: attachment; filename="' . basename($zip_name) . '"'
 header('Content-Length: ' . filesize($zip_path));
 header('Cache-Control: no-cache');
 readfile($zip_path);
+
+// Borrar archivos temporales después de enviar
+$_zip   = $zip_path;
+$_cards = OUTPUT_DIR . session_id() . '/';
+$_bg    = UPLOAD_DIR . session_id() . '/';
+register_shutdown_function(function() use ($_zip, $_cards, $_bg) {
+    @unlink($_zip);
+    foreach ([$_cards, $_bg] as $dir) {
+        if (is_dir($dir)) {
+            array_map('unlink', glob($dir . '*') ?: []);
+            @rmdir($dir);
+        }
+    }
+});

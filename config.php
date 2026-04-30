@@ -11,9 +11,12 @@ define('DB_NAME', 'mammoli_qslforge');
 define('DB_USER', 'mammoli_carlos');
 define('DB_PASS', 'REDACTED_DB_PASS');
 
-define('UPLOAD_DIR',  __DIR__ . '/uploads/');
-define('OUTPUT_DIR',  __DIR__ . '/output/');
 define('FONT_DIR',    __DIR__ . '/assets/fonts/');
+
+// Archivos temporales fuera del disco del hosting
+$_qslf_tmp = rtrim(sys_get_temp_dir(), '/') . '/qslf_' . substr(md5(__DIR__), 0, 8) . '/';
+define('UPLOAD_DIR', $_qslf_tmp . 'uploads/');
+define('OUTPUT_DIR', $_qslf_tmp . 'output/');
 
 define('MAX_ADIF_MB',  10);
 define('MAX_IMG_MB',   20);

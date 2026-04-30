@@ -26,7 +26,7 @@
 
     'step1_title'       => 'Subir archivos',
     'step2_title'       => 'Diseñar tarjeta',
-    'step3_title'       => 'Generar y descargar',
+    'step3_title'       => 'Generar tarjetas',
     'step_next'         => 'Continuar',
     'step_back'         => 'Volver',
 
@@ -75,7 +75,10 @@
 
     'generate_title'    => 'Generá tus tarjetas QSL',
     'generate_info'     => 'Listo para generar {n} tarjetas QSL.',
-    'generate_btn'      => 'Generar ZIP',
+    'action_choice'     => '¿Qué querés hacer?',
+    'action_zip'        => 'Descargar ZIP',
+    'action_email'      => 'Enviar por email',
+    'action_both'       => 'Ambas',
     'generating'        => 'Generando tarjetas…',
     'download_btn'      => 'Descargar ZIP ({n} tarjetas)',
     'email_section'     => 'Enviar por email',
@@ -83,11 +86,12 @@
     'email_from'        => 'Tu dirección de email',
     'email_subject'     => 'Asunto del email',
     'email_subject_def' => 'Tarjeta QSL de {callsign}',
+    'email_body_label'  => 'Texto del email',
     'email_body_def'    => "Estimado {name},\n\nAdjunto mi tarjeta QSL confirmando nuestro QSO del {date} — {band} {mode}.\n\n73 de {callsign}",
     'email_send_btn'    => 'Enviar emails',
     'email_sending'     => 'Enviando…',
     'email_done'        => '{n} emails enviados correctamente.',
-    'email_errors'      => '{n} emails fallaron — revisá el log.',
+    'email_errors'      => '{n} emails fallaron.',
 
     'login_title'       => 'Ingresar',
     'login_email'       => 'Email',
@@ -125,4 +129,28 @@
 
     'footer_text'       => 'QSLforge — generador gratuito de tarjetas QSL para radioaficionados',
     'footer_contact'    => 'Contacto',
+    'footer_by'         => 'Desarrollado por',
+    'footer_bug'        => 'Reportar un bug',
+
+    'preview_info'      => 'Preview: primer QSO: {call} · {date} · {band} · {mode}',
+
+    'warn_no_visible'   => 'No hay campos visibles. Activá al menos uno antes de continuar.',
+    'warn_no_call'      => 'El indicativo (CALL) no está visible. Se recomienda incluirlo.',
+    'warn_date_invalid' => 'La fecha del primer QSO parece inválida ({val}). Verificá el archivo ADIF.',
+    'warn_overlap'      => 'Algunos campos están muy cerca entre sí — pueden superponerse en la tarjeta.',
+    'warn_continue'     => 'Continuar de todas formas',
+
+    'bug_report_title'  => 'Reportar un bug',
+    'bug_report_intro'  => 'Describí el problema. Te responderemos por email.',
+    'bug_report_call'   => 'Tu indicativo (opcional)',
+    'bug_report_email'  => 'Tu email de contacto',
+    'bug_report_desc'   => 'Descripción del problema',
+    'bug_report_url'    => 'URL donde ocurrió',
+    'bug_report_send'   => 'Enviar reporte',
+    'bug_report_ok'     => '¡Reporte enviado! Gracias por ayudarnos a mejorar.',
+    'bug_report_err'    => 'Error al enviar. Escribinos a web@mammoli.ar.',
+
+    'select_all'        => 'Todos',
+    'select_none'       => 'Ninguno',
+    'select_invert'     => 'Invertir',
 ];
