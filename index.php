@@ -19,7 +19,7 @@ require_once __DIR__ . '/includes/header.php';
   <i class="bi bi-cone-striped fs-5 flex-shrink-0"></i>
   <span>
     <strong>Beta pública.</strong>
-    <?= t('lang_switch_code') === 'en'
+    <?= t('lang_switch_code') === 'es'
       ? 'This is an early version — expect improvements in fonts, layout options, email delivery and more. Your feedback helps.'
       : 'Esta es una versión temprana — habrá mejoras en fuentes, opciones de diseño, envío de emails y más. Tu feedback ayuda.' ?>
     &nbsp;<a href="#" class="alert-link" data-bs-toggle="modal" data-bs-target="#modalBugReport"><?= t('footer_bug') ?></a>
