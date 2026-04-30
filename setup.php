@@ -18,9 +18,9 @@ if ($key !== 'qslforge_setup_2026') { http_response_code(403); die('Forbidden');
 
 // ── DB config ─────────────────────────────────────────────────────────────────
 $db_host = 'localhost';
-$db_name = 'mammoli_qslforge';
-$db_user = 'mammoli_carlos';
-$db_pass = 'REDACTED_DB_PASS';
+$db_name = 'qslforge';
+$db_user = 'qslforge';
+$db_pass = '';
 
 // ── Server checks ─────────────────────────────────────────────────────────────
 $checks = [

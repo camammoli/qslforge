@@ -6,10 +6,15 @@ define('APP_VERSION', '0.1.0');
 define('APP_URL',     '/qslforge');
 define('BASE_DIR',    __DIR__);
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'mammoli_qslforge');
-define('DB_USER', 'mammoli_carlos');
-define('DB_PASS', 'REDACTED_DB_PASS');
+// Credenciales de BD en config.local.php (excluido del repo)
+if (file_exists(__DIR__ . '/config.local.php')) {
+    require_once __DIR__ . '/config.local.php';
+} else {
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'qslforge');
+    define('DB_USER', 'qslforge');
+    define('DB_PASS', '');
+}
 
 define('FONT_DIR',    __DIR__ . '/assets/fonts/');
 
