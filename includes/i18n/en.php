@@ -145,6 +145,7 @@
 
     'preview_info'      => 'Preview: first QSO: {call} · {date} · {band} · {mode}',
 
+    'warn_no_qsos'      => 'Select at least one QSO to generate.',
     'warn_no_visible'   => 'No fields are visible. Enable at least one before continuing.',
     'warn_no_call'      => 'The callsign (CALL) field is not visible. It is recommended to include it.',
     'warn_date_invalid' => 'The first QSO date looks invalid ({val}). Please check your ADIF file.',

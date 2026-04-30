@@ -24,6 +24,14 @@ $template = $_SESSION['gen_template'] ?? default_template();
 
 // ── Generate batch ────────────────────────────────────────────────────────────
 if ($action === 'generate') {
+    // Filtrar QSOs seleccionados por el usuario (si se envía la lista)
+    $allowed_calls = $body['calls'] ?? null;
+    if ($allowed_calls !== null && is_array($allowed_calls) && count($allowed_calls)) {
+        $allowed = array_map('strtoupper', $allowed_calls);
+        $qsos = array_values(array_filter($qsos, fn($q) => in_array(strtoupper($q['CALL'] ?? ''), $allowed)));
+    }
+    if (empty($qsos)) { echo json_encode(['ok'=>false,'error'=>t('err_generate')]); exit; }
+
     purge_old_output();
     $result = generate_batch(session_id(), $bg, $qsos, $template);
     if (empty($result['files'])) { echo json_encode(['ok'=>false,'error'=>t('err_generate')]); exit; }

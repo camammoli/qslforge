@@ -10,8 +10,8 @@ $page_title = t('nav_generate');
 $step  = (int)($_GET['step'] ?? $_SESSION['gen_step'] ?? 1);
 $error = '';
 
-// Limpiar sesión al entrar a step 1 por GET (evita arrancar a mitad del flujo al recargar)
-if ($step === 1 && $_SERVER['REQUEST_METHOD'] === 'GET') {
+// Limpiar sesión en cualquier GET sin param step (reload desde cualquier punto → vuelve a step 1)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['step'])) {
     foreach (['gen_qsos','gen_bg','gen_step','gen_template','gen_summary','gen_adif_name',
               'gen_uuid','gen_zip','gen_files','gen_zip_name'] as $k) {
         unset($_SESSION[$k]);
@@ -486,13 +486,24 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
 
 <div class="col-lg-5">
   <div class="card shadow-sm">
-    <div class="card-header fw-semibold small"><i class="bi bi-list-ul me-1"></i>QSO list</div>
-    <div class="card-body p-0" style="max-height:400px;overflow-y:auto">
-      <table class="table table-sm mb-0 small">
-        <thead><tr><th>Call</th><th>Date</th><th>Band</th><th>Mode</th></tr></thead>
+    <div class="card-header fw-semibold small d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-list-ul me-1"></i>QSO list</span>
+      <span id="qso-sel-count" class="badge bg-secondary"><?= count($qsos) ?> <?= t('lang_switch_code') === 'en' ? 'selected' : 'seleccionados' ?></span>
+    </div>
+    <div class="card-body p-2 border-bottom">
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectQsos('all')"><?= t('select_all') ?></button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectQsos('none')"><?= t('select_none') ?></button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectQsos('invert')"><?= t('select_invert') ?></button>
+      </div>
+    </div>
+    <div class="card-body p-0" style="max-height:340px;overflow-y:auto">
+      <table class="table table-sm mb-0 small" id="qso-list-table">
+        <thead><tr><th></th><th>Call</th><th>Date</th><th>Band</th><th>Mode</th></tr></thead>
         <tbody>
           <?php foreach ($qsos as $q): ?>
           <tr>
+            <td><input type="checkbox" class="form-check-input qso-chk" data-call="<?= h($q['CALL'] ?? '') ?>" checked onchange="updateQsoCount()"></td>
             <td class="fw-semibold"><?= h($q['CALL'] ?? '') ?></td>
             <td><?= h(fmt_date_adif($q['QSO_DATE'] ?? '')) ?></td>
             <td><?= h($q['BAND'] ?? '') ?></td>
@@ -515,15 +526,41 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
 let batchUuid = null;
 let batchMode = 'zip';
 const qsos = <?= json_encode(array_map(fn($q) => ['call' => $q['CALL'] ?? '', 'name' => $q['NAME'] ?? '', 'email' => ''], $qsos)) ?>;
+const labelSelected = '<?= t('lang_switch_code') === 'en' ? 'selected' : 'seleccionados' ?>';
+
+function getSelectedCalls() {
+  const calls = [];
+  document.querySelectorAll('.qso-chk:checked').forEach(chk => calls.push(chk.dataset.call));
+  return [...new Set(calls)];
+}
+
+function updateQsoCount() {
+  const n = document.querySelectorAll('.qso-chk:checked').length;
+  document.getElementById('qso-sel-count').textContent = n + ' ' + labelSelected;
+}
+
+function selectQsos(mode) {
+  document.querySelectorAll('.qso-chk').forEach(c => {
+    if (mode === 'all')         c.checked = true;
+    else if (mode === 'none')   c.checked = false;
+    else if (mode === 'invert') c.checked = !c.checked;
+  });
+  updateQsoCount();
+}
 
 function generateBatch(mode) {
+  const selectedCalls = getSelectedCalls();
+  if (selectedCalls.length === 0) {
+    alert('<?= addslashes(t('warn_no_qsos')) ?>');
+    return;
+  }
   batchMode = mode || 'zip';
   document.getElementById('action-section').classList.add('d-none');
   document.getElementById('gen-progress').classList.remove('d-none');
   fetch('<?= APP_URL ?>/api/generate.php', {
     method: 'POST',
     headers: {'X-CSRF-Token': '<?= csrf_token() ?>','Content-Type':'application/json'},
-    body: JSON.stringify({action: 'generate'})
+    body: JSON.stringify({action: 'generate', calls: selectedCalls})
   })
   .then(r => r.json())
   .then(d => {
@@ -541,7 +578,7 @@ function generateBatch(mode) {
         dlLink.classList.remove('d-none');
       }
       if (batchMode === 'email' || batchMode === 'both') {
-        buildEmailContacts();
+        buildEmailContacts(selectedCalls);
         document.getElementById('email-section').classList.remove('d-none');
       }
     } else {
@@ -551,36 +588,23 @@ function generateBatch(mode) {
   });
 }
 
-function buildEmailContacts() {
+function buildEmailContacts(selectedCalls) {
   const el = document.getElementById('email-contacts');
   const seen = {};
   const rows = [];
   qsos.forEach(q => {
-    if (seen[q.call]) return; seen[q.call] = 1;
+    if (seen[q.call] || !selectedCalls.includes(q.call)) return;
+    seen[q.call] = 1;
     rows.push(q);
   });
-  let html = '<div class="mb-2 d-flex gap-2">';
-  html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDests(\'all\')"><?= addslashes(t('select_all')) ?></button>';
-  html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDests(\'none\')"><?= addslashes(t('select_none')) ?></button>';
-  html += '<button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectDests(\'invert\')"><?= addslashes(t('select_invert')) ?></button>';
-  html += '</div>';
-  html += '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th></th><th>Callsign</th><th>Email</th></tr></thead><tbody>';
+  let html = '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th>Callsign</th><th>Email</th></tr></thead><tbody>';
   rows.forEach(q => {
-    html += '<tr><td><input type="checkbox" class="form-check-input dest-chk" checked></td>';
+    html += '<tr>';
     html += '<td class="fw-semibold">' + q.call + '</td>';
     html += '<td><input type="email" class="form-control form-control-sm email-dest" data-call="' + q.call + '" data-name="' + (q.name||q.call) + '" placeholder="(skip)"></td></tr>';
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
-}
-
-function selectDests(mode) {
-  const chks = document.querySelectorAll('.dest-chk');
-  chks.forEach(c => {
-    if (mode === 'all')    c.checked = true;
-    else if (mode === 'none')   c.checked = false;
-    else if (mode === 'invert') c.checked = !c.checked;
-  });
 }
 
 function sendEmails() {
@@ -589,9 +613,8 @@ function sendEmails() {
   const bodyTpl = document.getElementById('email-body').value;
   const dests = [];
   document.querySelectorAll('#email-contacts tbody tr').forEach(row => {
-    const chk = row.querySelector('.dest-chk');
     const inp = row.querySelector('.email-dest');
-    if (chk && chk.checked && inp && inp.value) {
+    if (inp && inp.value) {
       dests.push({call: inp.dataset.call, name: inp.dataset.name, email: inp.value});
     }
   });
@@ -611,6 +634,11 @@ function sendEmails() {
       ? '<div class="alert alert-success small py-2 mt-2">' + d.message + '</div>'
       : '<div class="alert alert-danger small py-2 mt-2">' + (d.error||'Error') + '</div>';
   });
+}
+
+// Sacar ?step=3 de la URL — un reload vuelve a step 1
+if (window.history && window.history.replaceState) {
+  window.history.replaceState({}, '', '<?= APP_URL ?>/generate.php');
 }
 </script>
 

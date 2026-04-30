@@ -134,6 +134,7 @@
 
     'preview_info'      => 'Preview: primer QSO: {call} · {date} · {band} · {mode}',
 
+    'warn_no_qsos'      => 'Seleccioná al menos un QSO para generar.',
     'warn_no_visible'   => 'No hay campos visibles. Activá al menos uno antes de continuar.',
     'warn_no_call'      => 'El indicativo (CALL) no está visible. Se recomienda incluirlo.',
     'warn_date_invalid' => 'La fecha del primer QSO parece inválida ({val}). Verificá el archivo ADIF.',
