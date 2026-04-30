@@ -145,6 +145,34 @@ function _setup_short(string $sql): string {
     preg_match('/CREATE TABLE.*?`(\w+)`/', $sql, $m);
     return $m[1] ?? trim(substr($sql, 0, 60)) . '…';
 }
+
+// ── Create admin user ─────────────────────────────────────────────────────────
+$admin_msg = '';
+if (isset($_POST['create_admin']) && $db_ok) {
+    $a_call  = strtoupper(trim($_POST['a_call']  ?? ''));
+    $a_email = strtolower(trim($_POST['a_email'] ?? ''));
+    $a_pass  = $_POST['a_pass'] ?? '';
+    if ($a_call && filter_var($a_email, FILTER_VALIDATE_EMAIL) && strlen($a_pass) >= 6) {
+        try {
+            $pdo_a = new PDO("mysql:host={$db_host};dbname={$db_name};charset=utf8mb4", $db_user, $db_pass,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            $ex = $pdo_a->prepare("SELECT id FROM usuarios WHERE email=?"); $ex->execute([$a_email]);
+            if ($ex->fetch()) {
+                // Already exists — promote to admin
+                $pdo_a->prepare("UPDATE usuarios SET rol='admin', activo=1 WHERE email=?")->execute([$a_email]);
+                $admin_msg = "✓ User {$a_email} promoted to admin.";
+            } else {
+                $pdo_a->prepare("INSERT INTO usuarios (callsign,email,password_hash,rol,lang) VALUES (?,?,?,'admin','en')")
+                    ->execute([$a_call, $a_email, password_hash($a_pass, PASSWORD_BCRYPT)]);
+                $admin_msg = "✓ Admin user {$a_call} ({$a_email}) created.";
+            }
+        } catch (\Throwable $e) {
+            $admin_msg = "✗ Error: " . $e->getMessage();
+        }
+    } else {
+        $admin_msg = "✗ Fill all fields (password min 6 chars).";
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -216,11 +244,61 @@ function _setup_short(string $sql): string {
     Then reload this page.
   </div>
   <?php else: ?>
-  <form method="get">
+  <form method="get" class="mb-4">
     <input type="hidden" name="key" value="<?= htmlspecialchars($key) ?>">
     <input type="hidden" name="run" value="1">
     <button class="btn btn-warning">Run migrations</button>
   </form>
+
+  <!-- Create / promote admin -->
+  <div class="card mb-4">
+    <div class="card-header fw-semibold small">Create or promote admin user</div>
+    <div class="card-body">
+      <?php if ($admin_msg): ?>
+      <div class="alert alert-<?= str_starts_with($admin_msg, '✓') ? 'success' : 'danger' ?> small py-2"><?= htmlspecialchars($admin_msg) ?></div>
+      <?php endif; ?>
+      <p class="small text-muted mb-3">If the email already exists, it will be promoted to admin without changing the password.</p>
+      <form method="post">
+        <input type="hidden" name="key" value="<?= htmlspecialchars($key) ?>">
+        <div class="row g-2">
+          <div class="col-sm-3">
+            <input type="text" name="a_call" class="form-control form-control-sm text-uppercase" placeholder="Callsign" required>
+          </div>
+          <div class="col-sm-4">
+            <input type="email" name="a_email" class="form-control form-control-sm" placeholder="Email" required>
+          </div>
+          <div class="col-sm-3">
+            <input type="password" name="a_pass" class="form-control form-control-sm" placeholder="Password (min 6)" minlength="6">
+          </div>
+          <div class="col-sm-2">
+            <button name="create_admin" class="btn btn-sm btn-success w-100">Create</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Font status -->
+  <div class="card mb-4">
+    <div class="card-header fw-semibold small">TTF Fonts — <code>assets/fonts/</code></div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0 small">
+        <?php
+        $fonts = ['Roboto-Regular.ttf','Roboto-Bold.ttf','Roboto-Italic.ttf',
+                  'OpenSans-Regular.ttf','OpenSans-Bold.ttf',
+                  'CourierPrime-Regular.ttf','CourierPrime-Bold.ttf'];
+        foreach ($fonts as $f):
+            $exists = file_exists(FONT_DIR . $f);
+        ?>
+        <tr>
+          <td class="ps-3"><code><?= $f ?></code></td>
+          <td class="<?= $exists ? 'text-success' : 'text-muted' ?>"><?= $exists ? '✓ present' : '— missing (fallback GD font)' ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </table>
+      <div class="p-3 small text-muted">Download from Google Fonts: Roboto, Open Sans, Courier Prime. Upload the TTF files to <code>qslforge/assets/fonts/</code> via FTP.</div>
+    </div>
+  </div>
   <?php endif; ?>
 </div>
 </body>

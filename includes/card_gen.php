@@ -36,19 +36,25 @@ function generate_card(string $bg_path, array $qso, array $template, string $out
         $b = hexdec(substr($hex, 4, 2));
         $color = imagecolorallocate($img, $r, $g, $b);
 
-        // Adjust X for alignment using imagettfbbox
-        if ($align !== 'left' && function_exists('imagettfbbox')) {
-            $box = imagettfbbox($size, 0, $font, $text);
-            $tw  = abs($box[4] - $box[0]);
-            if ($align === 'center') $x -= (int)($tw / 2);
-            elseif ($align === 'right') $x -= $tw;
-        }
+        // TTF only if function exists AND font file is present
+        $has_ttf = function_exists('imagettftext') && file_exists($font);
 
-        if (function_exists('imagettftext')) {
+        if ($has_ttf) {
+            if ($align !== 'left' && function_exists('imagettfbbox')) {
+                $box = imagettfbbox($size, 0, $font, $text);
+                $tw  = abs($box[4] - $box[0]);
+                if ($align === 'center') $x -= (int)($tw / 2);
+                elseif ($align === 'right') $x -= $tw;
+            }
             imagettftext($img, $size, 0, $x, $y, $color, $font, $text);
         } else {
-            // Fallback: built-in font (no TTF)
-            imagestring($img, 5, $x, $y - 15, $text, $color);
+            // Fallback: built-in GD fonts (no TTF files needed)
+            $fn = min(5, max(1, (int)round($size / 9)));
+            $fw = imagefontwidth($fn);
+            $fh = imagefontheight($fn);
+            if ($align === 'center') $x -= (int)(strlen($text) * $fw / 2);
+            elseif ($align === 'right') $x -= strlen($text) * $fw;
+            imagestring($img, $fn, $x, $y - $fh, $text, $color);
         }
     }
 
