@@ -1,0 +1,27 @@
+body { background: #f8f9fa; }
+
+/* Card preview dark area */
+#preview-img { border-radius: .375rem; box-shadow: 0 0 20px rgba(0,0,0,.5); }
+
+/* Design form scrollable */
+.field-row { transition: opacity .2s; }
+.field-row.hidden { opacity: .4; }
+
+/* Step indicator */
+.step-badge { width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: 700; }
+
+/* Table compact */
+.table-sm td, .table-sm th { vertical-align: middle; }
+
+/* Number inputs */
+input[type=number] { -moz-appearance: textfield; }
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Color input full width */
+input[type=color].form-control-color { min-width: 100%; }
+
+/* Responsive card preview */
+@media (max-width: 991px) {
+  #preview-img { max-height: 280px; object-fit: contain; }
+}

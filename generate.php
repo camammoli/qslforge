@@ -1,0 +1,498 @@
+<?php
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/includes/adif.php';
+require_once __DIR__ . '/includes/card_gen.php';
+session_init();
+
+$page_title = t('nav_generate');
+
+// ── Step logic ────────────────────────────────────────────────────────────────
+$step  = (int)($_GET['step'] ?? $_SESSION['gen_step'] ?? 1);
+$error = '';
+
+// ── Step 1 POST: upload ADIF + background ─────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload') {
+    verify_csrf();
+
+    $adif_file = $_FILES['adif'] ?? null;
+    $bg_file   = $_FILES['background'] ?? null;
+
+    if (!$adif_file || $adif_file['error'] !== UPLOAD_ERR_OK) {
+        $error = t('err_adif_required');
+    } elseif ($adif_file['size'] > MAX_ADIF_MB * 1024 * 1024) {
+        $error = t('err_adif_toolarge');
+    } elseif (!$bg_file || $bg_file['error'] !== UPLOAD_ERR_OK) {
+        $error = t('err_bg_required');
+    } elseif ($bg_file['size'] > MAX_IMG_MB * 1024 * 1024) {
+        $error = t('err_bg_toolarge');
+    } else {
+        $mime = mime_content_type($bg_file['tmp_name']);
+        if (!in_array($mime, ['image/jpeg','image/png'])) {
+            $error = t('err_bg_invalid');
+        } else {
+            // Parse ADIF
+            $adif_content = file_get_contents($adif_file['tmp_name']);
+            $qsos = adif_parse($adif_content);
+            if (empty($qsos)) {
+                $error = t('err_adif_empty');
+            } else {
+                // Save files to uploads/session/
+                $sid = session_id();
+                $upload_path = UPLOAD_DIR . $sid . '/';
+                if (!is_dir($upload_path)) mkdir($upload_path, 0755, true);
+
+                $bg_ext  = $mime === 'image/png' ? 'png' : 'jpg';
+                $bg_dest = $upload_path . 'background.' . $bg_ext;
+                move_uploaded_file($bg_file['tmp_name'], $bg_dest);
+
+                $_SESSION['gen_qsos']    = $qsos;
+                $_SESSION['gen_bg']      = $bg_dest;
+                $_SESSION['gen_step']    = 2;
+                $_SESSION['gen_summary'] = adif_summary($qsos);
+                $_SESSION['gen_adif_name'] = basename($adif_file['name']);
+
+                // Load user's default template if logged in
+                if (is_logged()) {
+                    try {
+                        $st = get_pdo()->prepare("SELECT config FROM templates WHERE usuario_id=? AND is_default=1 LIMIT 1");
+                        $st->execute([$_SESSION['uid']]);
+                        $tpl = $st->fetchColumn();
+                        $_SESSION['gen_template'] = $tpl ? json_decode($tpl, true) : default_template();
+                    } catch (PDOException $e) {
+                        $_SESSION['gen_template'] = default_template();
+                    }
+                } else {
+                    $_SESSION['gen_template'] = default_template();
+                }
+
+                header('Location: ' . APP_URL . '/generate.php?step=2');
+                exit;
+            }
+        }
+    }
+    $step = 1;
+}
+
+// ── Step 2 POST: save design config ──────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'design') {
+    verify_csrf();
+    if (empty($_SESSION['gen_qsos'])) { flash('error', t('err_session')); header('Location: ' . APP_URL . '/generate.php'); exit; }
+
+    $tpl = $_SESSION['gen_template'] ?? default_template();
+    $fields = array_keys($tpl['fields']);
+    foreach ($fields as $f) {
+        $tpl['fields'][$f]['visible'] = !empty($_POST['vis_' . $f]);
+        $tpl['fields'][$f]['x']       = (int)($_POST['x_' . $f]      ?? $tpl['fields'][$f]['x']);
+        $tpl['fields'][$f]['y']       = (int)($_POST['y_' . $f]      ?? $tpl['fields'][$f]['y']);
+        $tpl['fields'][$f]['size']    = max(8, min(200, (int)($_POST['size_' . $f] ?? $tpl['fields'][$f]['size'])));
+        $tpl['fields'][$f]['color']   = preg_match('/^#[0-9a-fA-F]{6}$/', $_POST['color_' . $f] ?? '') ? $_POST['color_' . $f] : $tpl['fields'][$f]['color'];
+        $tpl['fields'][$f]['font']    = array_key_exists($_POST['font_' . $f]  ?? '', allowed_fonts()) ? $_POST['font_' . $f]  : ($tpl['fields'][$f]['font']  ?? 'roboto');
+        $tpl['fields'][$f]['align']   = in_array($_POST['align_' . $f] ?? '', ['left','center','right']) ? $_POST['align_' . $f] : ($tpl['fields'][$f]['align'] ?? 'left');
+        $tpl['fields'][$f]['prefix']  = substr($_POST['prefix_' . $f] ?? ($tpl['fields'][$f]['prefix'] ?? ''), 0, 50);
+        if ($f === 'CUSTOM') $tpl['fields'][$f]['custom_text'] = substr($_POST['custom_text'] ?? ($tpl['fields'][$f]['custom_text'] ?? ''), 0, 200);
+    }
+    $_SESSION['gen_template'] = $tpl;
+
+    // Save template if requested
+    if (!empty($_POST['save_template']) && is_logged()) {
+        $tname = trim(substr($_POST['template_name'] ?? 'My template', 0, 100));
+        try {
+            $pdo = get_pdo();
+            $is_def = empty($pdo->query("SELECT COUNT(*) FROM templates WHERE usuario_id=" . (int)$_SESSION['uid'])->fetchColumn()) ? 1 : 0;
+            $pdo->prepare("INSERT INTO templates (usuario_id, nombre, config, is_default) VALUES (?,?,?,?)")
+                ->execute([$_SESSION['uid'], $tname, json_encode($tpl), $is_def]);
+            flash('success', 'Template saved!');
+        } catch (PDOException $e) {}
+    }
+
+    $_SESSION['gen_step'] = 3;
+    header('Location: ' . APP_URL . '/generate.php?step=3');
+    exit;
+}
+
+// ── Guards ─────────────────────────────────────────────────────────────────────
+if ($step === 2 && empty($_SESSION['gen_qsos'])) { $step = 1; }
+if ($step === 3 && empty($_SESSION['gen_qsos'])) { $step = 1; }
+
+$qsos     = $_SESSION['gen_qsos']    ?? [];
+$summary  = $_SESSION['gen_summary'] ?? [];
+$template = $_SESSION['gen_template'] ?? default_template();
+$bg_path  = $_SESSION['gen_bg']      ?? '';
+$first    = $qsos[0] ?? [];
+
+require_once __DIR__ . '/includes/header.php';
+?>
+
+<!-- Progress bar -->
+<div class="d-flex align-items-center gap-3 mb-4">
+  <?php foreach ([1 => t('step1_title'), 2 => t('step2_title'), 3 => t('step3_title')] as $n => $label): ?>
+  <div class="d-flex align-items-center gap-2 <?= $n < $step ? 'text-success' : ($n === $step ? 'fw-bold' : 'text-muted') ?>">
+    <span class="badge rounded-pill <?= $n < $step ? 'bg-success' : ($n === $step ? 'bg-warning text-dark' : 'bg-secondary') ?>"><?= $n ?></span>
+    <span class="small d-none d-md-inline"><?= h($label) ?></span>
+  </div>
+  <?php if ($n < 3): ?><div class="flex-grow-1 border-top"></div><?php endif; ?>
+  <?php endforeach; ?>
+</div>
+
+<?php if ($error): ?>
+<div class="alert alert-danger"><?= h($error) ?></div>
+<?php endif; ?>
+
+<?php /* ═══════════════════════════════ STEP 1 ══════════════════════════════ */ ?>
+<?php if ($step === 1): ?>
+<div class="row justify-content-center">
+<div class="col-md-7 col-lg-6">
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold"><i class="bi bi-upload me-2"></i><?= t('step1_title') ?></div>
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      <?= csrf_input() ?>
+      <input type="hidden" name="action" value="upload">
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold"><?= t('adif_label') ?></label>
+        <input type="file" name="adif" class="form-control" accept=".adi,.adif" required>
+        <div class="form-text"><?= t('adif_help', ['max' => MAX_ADIF_MB]) ?></div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold"><?= t('bg_label') ?></label>
+        <input type="file" name="background" class="form-control" accept="image/jpeg,image/png,.jpg,.jpeg,.png" required id="bg-input">
+        <div class="form-text"><?= t('bg_help', ['max' => MAX_IMG_MB]) ?></div>
+        <div id="bg-preview" class="mt-2 d-none">
+          <img id="bg-preview-img" class="img-fluid rounded border" style="max-height:200px" alt="preview">
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-warning w-100 fw-semibold">
+        <i class="bi bi-arrow-right-circle me-1"></i><?= t('upload_btn') ?>
+      </button>
+    </form>
+  </div>
+</div>
+</div>
+</div>
+<script>
+document.getElementById('bg-input').addEventListener('change', function() {
+  const f = this.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  document.getElementById('bg-preview-img').src = url;
+  document.getElementById('bg-preview').classList.remove('d-none');
+});
+</script>
+
+<?php /* ═══════════════════════════════ STEP 2 ══════════════════════════════ */ ?>
+<?php elseif ($step === 2): ?>
+<div class="row g-4">
+  <!-- Form col -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-sliders me-2"></i><?= t('step2_title') ?></span>
+        <span class="badge bg-secondary"><?= $summary['total'] ?> QSOs</span>
+      </div>
+      <div class="card-body p-0" style="overflow-y:auto;max-height:75vh">
+        <form method="post" id="design-form">
+          <?= csrf_input() ?>
+          <input type="hidden" name="action" value="design">
+
+          <?php $fonts = allowed_fonts(); ?>
+          <?php foreach ($template['fields'] as $field => $cfg): ?>
+          <div class="border-bottom p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="fw-semibold small mb-0">
+                <input type="checkbox" name="vis_<?= $field ?>" class="form-check-input me-1" <?= $cfg['visible'] ? 'checked' : '' ?> onchange="triggerPreview()">
+                <?= t('f_' . $field) ?>
+              </label>
+            </div>
+            <div class="row g-1 g-preview-trigger">
+              <div class="col-4">
+                <label class="form-label small mb-0"><?= t('field_x') ?></label>
+                <input type="number" name="x_<?= $field ?>" class="form-control form-control-sm" value="<?= (int)$cfg['x'] ?>" min="0">
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-0"><?= t('field_y') ?></label>
+                <input type="number" name="y_<?= $field ?>" class="form-control form-control-sm" value="<?= (int)$cfg['y'] ?>" min="0">
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-0"><?= t('field_size') ?></label>
+                <input type="number" name="size_<?= $field ?>" class="form-control form-control-sm" value="<?= (int)$cfg['size'] ?>" min="8" max="200">
+              </div>
+              <div class="col-4">
+                <label class="form-label small mb-0"><?= t('field_color') ?></label>
+                <input type="color" name="color_<?= $field ?>" class="form-control form-control-color form-control-sm w-100" value="<?= h($cfg['color']) ?>">
+              </div>
+              <div class="col-8">
+                <label class="form-label small mb-0"><?= t('field_font') ?></label>
+                <select name="font_<?= $field ?>" class="form-select form-select-sm">
+                  <?php foreach ($fonts as $fk => $fn): ?>
+                  <option value="<?= $fk ?>" <?= ($cfg['font'] ?? 'roboto') === $fk ? 'selected' : '' ?>><?= h($fn) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-0"><?= t('field_align') ?></label>
+                <select name="align_<?= $field ?>" class="form-select form-select-sm">
+                  <?php foreach (['left','center','right'] as $a): ?>
+                  <option value="<?= $a ?>" <?= ($cfg['align'] ?? 'left') === $a ? 'selected' : '' ?>><?= t('align_' . $a) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-0"><?= t('field_prefix') ?></label>
+                <input type="text" name="prefix_<?= $field ?>" class="form-control form-control-sm" value="<?= h($cfg['prefix'] ?? '') ?>" maxlength="30">
+              </div>
+              <?php if ($field === 'CUSTOM'): ?>
+              <div class="col-12">
+                <input type="text" name="custom_text" class="form-control form-control-sm" value="<?= h($cfg['custom_text'] ?? 'Confirming our QSO — TNX!') ?>" placeholder="Fixed text" maxlength="200">
+              </div>
+              <?php endif; ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <?php if (is_logged()): ?>
+          <div class="p-3 border-bottom bg-body-secondary">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="save_template" id="chk-save">
+              <label class="form-check-label small fw-semibold" for="chk-save"><?= t('save_template') ?></label>
+            </div>
+            <input type="text" name="template_name" class="form-control form-control-sm" placeholder="<?= t('template_name') ?>" maxlength="100">
+          </div>
+          <?php endif; ?>
+
+          <div class="p-3">
+            <button type="submit" class="btn btn-warning w-100 fw-semibold">
+              <i class="bi bi-arrow-right-circle me-1"></i><?= t('step_next') ?>
+            </button>
+            <a href="<?= APP_URL ?>/generate.php?step=1" class="btn btn-outline-secondary w-100 mt-2"><?= t('step_back') ?></a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview col -->
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-eye me-2"></i>Preview — <?= h($first['CALL'] ?? 'N0CALL') ?></span>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-preview" onclick="loadPreview()">
+          <i class="bi bi-arrow-clockwise me-1"></i><?= t('preview_btn') ?>
+        </button>
+      </div>
+      <div class="card-body text-center p-2" style="background:#111;min-height:300px;border-radius:0 0 .375rem .375rem">
+        <div id="preview-loading" class="text-muted py-4 d-none">
+          <div class="spinner-border spinner-border-sm me-2"></div><?= t('preview_loading') ?>
+        </div>
+        <img id="preview-img" class="img-fluid rounded" style="max-width:100%;display:none" alt="Card preview">
+        <div id="preview-placeholder" class="text-muted py-5 small">
+          <i class="bi bi-image fs-1 d-block mb-2 opacity-25"></i>
+          <?= t('preview_btn') ?>
+        </div>
+      </div>
+    </div>
+    <div class="text-muted small mt-2 text-center">
+      <i class="bi bi-info-circle me-1"></i>
+      Preview uses first QSO: <strong><?= h($first['CALL'] ?? '') ?></strong>
+      <?= $first ? '· ' . fmt_date_adif($first['QSO_DATE'] ?? '') . ' · ' . ($first['BAND'] ?? '') . ' · ' . ($first['MODE'] ?? '') : '' ?>
+    </div>
+  </div>
+</div>
+
+<script>
+let previewTimer;
+function triggerPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(loadPreview, 800);
+}
+function loadPreview() {
+  const form = document.getElementById('design-form');
+  const data = new FormData(form);
+  data.append('preview', '1');
+  document.getElementById('preview-loading').classList.remove('d-none');
+  document.getElementById('preview-placeholder').style.display = 'none';
+  document.getElementById('preview-img').style.display = 'none';
+  fetch('<?= APP_URL ?>/api/preview.php', { method: 'POST', body: data })
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('preview-loading').classList.add('d-none');
+      if (d.ok) {
+        const img = document.getElementById('preview-img');
+        img.src = d.url + '?t=' + Date.now();
+        img.style.display = '';
+      } else {
+        document.getElementById('preview-placeholder').style.display = '';
+        document.getElementById('preview-placeholder').textContent = d.error || 'Error';
+      }
+    })
+    .catch(() => {
+      document.getElementById('preview-loading').classList.add('d-none');
+      document.getElementById('preview-placeholder').style.display = '';
+    });
+}
+// Debounced update on any input change
+document.getElementById('design-form').addEventListener('input', triggerPreview);
+// Initial preview on page load
+loadPreview();
+</script>
+
+<?php /* ═══════════════════════════════ STEP 3 ══════════════════════════════ */ ?>
+<?php elseif ($step === 3): ?>
+<div class="row g-4">
+<div class="col-lg-7">
+<div class="card shadow-sm">
+  <div class="card-header fw-semibold"><i class="bi bi-archive me-2"></i><?= t('generate_title') ?></div>
+  <div class="card-body">
+    <div class="alert alert-info mb-4">
+      <i class="bi bi-info-circle me-2"></i>
+      <?= t('generate_info', ['n' => $summary['total'] ?? 0]) ?>
+      <div class="small mt-1 text-muted">
+        <?= $summary['calls'] ?? 0 ?> unique callsigns
+        · <?= h($summary['bands'] ?? '') ?>
+        · <?= h($summary['modes'] ?? '') ?>
+      </div>
+    </div>
+
+    <div id="gen-section">
+      <button class="btn btn-warning btn-lg w-100 fw-semibold" id="btn-generate" onclick="generateBatch()">
+        <i class="bi bi-magic me-2"></i><?= t('generate_btn') ?>
+      </button>
+    </div>
+
+    <div id="gen-progress" class="d-none text-center py-3">
+      <div class="spinner-border text-warning mb-2"></div>
+      <div class="text-muted"><?= t('generating') ?></div>
+    </div>
+
+    <div id="gen-done" class="d-none">
+      <a id="dl-link" href="#" class="btn btn-success btn-lg w-100 fw-semibold mb-3" download>
+        <i class="bi bi-download me-2"></i><span id="dl-label"><?= t('download_btn', ['n' => $summary['total'] ?? 0]) ?></span>
+      </a>
+      <a href="<?= APP_URL ?>/generate.php" class="btn btn-outline-secondary w-100">
+        <i class="bi bi-plus me-1"></i>Generate another batch
+      </a>
+    </div>
+
+    <!-- Email section (shown after generation) -->
+    <div id="email-section" class="d-none mt-4 border-top pt-4">
+      <h6 class="fw-semibold"><i class="bi bi-envelope me-2 text-primary"></i><?= t('email_section') ?></h6>
+      <p class="small text-muted"><?= t('email_help') ?></p>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold"><?= t('email_from') ?></label>
+        <input type="email" id="email-from" class="form-control form-control-sm"
+               value="<?= h(usuario_actual()['email'] ?? '') ?>" placeholder="your@email.com">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold"><?= t('email_subject') ?></label>
+        <input type="text" id="email-subject" class="form-control form-control-sm"
+               value="<?= h(t('email_subject_def', ['callsign' => usuario_actual()['callsign'] ?? 'N0CALL'])) ?>">
+      </div>
+      <div id="email-contacts" class="mb-3"></div>
+      <button class="btn btn-primary w-100" id="btn-send-emails" onclick="sendEmails()">
+        <i class="bi bi-send me-1"></i><?= t('email_send_btn') ?>
+      </button>
+      <div id="email-result" class="mt-2"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="col-lg-5">
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold small"><i class="bi bi-list-ul me-1"></i>QSO list</div>
+    <div class="card-body p-0" style="max-height:400px;overflow-y:auto">
+      <table class="table table-sm mb-0 small">
+        <thead><tr><th>Call</th><th>Date</th><th>Band</th><th>Mode</th></tr></thead>
+        <tbody>
+          <?php foreach ($qsos as $q): ?>
+          <tr>
+            <td class="fw-semibold"><?= h($q['CALL'] ?? '') ?></td>
+            <td><?= h(fmt_date_adif($q['QSO_DATE'] ?? '')) ?></td>
+            <td><?= h($q['BAND'] ?? '') ?></td>
+            <td><?= h($q['MODE'] ?? '') ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="mt-2">
+    <a href="<?= APP_URL ?>/generate.php?step=2" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i><?= t('step_back') ?>
+    </a>
+  </div>
+</div>
+</div>
+
+<script>
+let batchUuid = null;
+const qsos = <?= json_encode(array_map(fn($q) => ['call' => $q['CALL'] ?? '', 'name' => $q['NAME'] ?? '', 'email' => ''], $qsos)) ?>;
+
+function generateBatch() {
+  document.getElementById('btn-generate').disabled = true;
+  document.getElementById('gen-progress').classList.remove('d-none');
+  document.getElementById('gen-section').classList.add('d-none');
+  fetch('<?= APP_URL ?>/api/generate.php', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': '<?= csrf_token() ?>','Content-Type':'application/json'},
+    body: JSON.stringify({action: 'generate'})
+  })
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('gen-progress').classList.add('d-none');
+    if (d.ok) {
+      batchUuid = d.uuid;
+      document.getElementById('dl-link').href = '<?= APP_URL ?>/download.php?uuid=' + d.uuid;
+      document.getElementById('dl-label').textContent = '<?= addslashes(t('download_btn', ['n' => '{n}'])) ?>'.replace('{n}', d.n);
+      document.getElementById('gen-done').classList.remove('d-none');
+      buildEmailContacts();
+      document.getElementById('email-section').classList.remove('d-none');
+    } else {
+      document.getElementById('gen-section').classList.remove('d-none');
+      document.getElementById('btn-generate').disabled = false;
+      alert(d.error || '<?= addslashes(t('err_generate')) ?>');
+    }
+  });
+}
+
+function buildEmailContacts() {
+  const el = document.getElementById('email-contacts');
+  let html = '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th>Callsign</th><th>Email</th></tr></thead><tbody>';
+  const seen = {};
+  qsos.forEach(q => {
+    if (seen[q.call]) return; seen[q.call] = 1;
+    html += '<tr><td class="fw-semibold">' + q.call + '</td><td><input type="email" class="form-control form-control-sm email-dest" data-call="' + q.call + '" data-name="' + (q.name||q.call) + '" placeholder="(skip)"></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function sendEmails() {
+  const from    = document.getElementById('email-from').value;
+  const subject = document.getElementById('email-subject').value;
+  const dests   = [];
+  document.querySelectorAll('.email-dest').forEach(inp => {
+    if (inp.value) dests.push({call: inp.dataset.call, name: inp.dataset.name, email: inp.value});
+  });
+  if (!from || !dests.length) return;
+  document.getElementById('btn-send-emails').disabled = true;
+  fetch('<?= APP_URL ?>/api/generate.php', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': '<?= csrf_token() ?>','Content-Type':'application/json'},
+    body: JSON.stringify({action: 'send_emails', uuid: batchUuid, from, subject, dests})
+  })
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('btn-send-emails').disabled = false;
+    document.getElementById('email-result').innerHTML = d.ok
+      ? '<div class="alert alert-success small py-2 mt-2">' + d.message + '</div>'
+      : '<div class="alert alert-danger small py-2 mt-2">' + (d.error||'Error') + '</div>';
+  });
+}
+</script>
+
+<?php endif; ?>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
