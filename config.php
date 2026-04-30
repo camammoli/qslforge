@@ -7,7 +7,7 @@ define('APP_URL',     '/qslforge');
 define('BASE_DIR',    __DIR__);
 
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'mammoli_qsl');
+define('DB_NAME', 'mammoli_qslforge');
 define('DB_USER', 'mammoli_carlos');
 define('DB_PASS', 'REDACTED_DB_PASS');
 
