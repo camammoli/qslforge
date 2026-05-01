@@ -317,6 +317,9 @@ document.getElementById('bg-input').addEventListener('change', function() {
             <button type="button" class="btn btn-outline-secondary"        id="mode-grid-h" onclick="setLayoutMode('grid_h')" title="<?= t('lang_switch_code')==='en'?'Horizontal grid':'Grilla horizontal' ?>"><i class="bi bi-list-columns-reverse"></i></button>
             <button type="button" class="btn btn-outline-secondary"        id="mode-grid-v" onclick="setLayoutMode('grid_v')" title="<?= t('lang_switch_code')==='en'?'Vertical grid':'Grilla vertical' ?>"><i class="bi bi-layout-three-columns"></i></button>
           </div>
+          <button type="button" class="btn btn-sm btn-outline-secondary active" id="btn-grid-toggle" onclick="toggleGridOverlay()" title="<?= t('lang_switch_code')==='en'?'Show/hide grid':'Mostrar/ocultar grilla' ?>" style="display:none">
+            <i class="bi bi-grid-3x3"></i>
+          </button>
           <button class="btn btn-sm btn-outline-secondary" id="btn-preview" onclick="loadPreview()">
             <i class="bi bi-arrow-clockwise me-1"></i><?= t('preview_btn') ?>
           </button>
@@ -420,6 +423,7 @@ let previewTimer;
 let isDragging = false;
 let gridMode   = 'free';
 let dragState  = null;
+let showGrid   = true;
 const SNAP_PX  = 8;
 
 // Posiciones predefinidas [fracción_x, fracción_y, alineación_opcional]
@@ -501,9 +505,19 @@ function setLayoutMode(mode) {
     const btn = document.getElementById('mode-' + m);
     if (btn) btn.classList.toggle('active', m === mode.replace('_','-'));
   });
+  const toggleBtn = document.getElementById('btn-grid-toggle');
+  if (toggleBtn) toggleBtn.style.display = mode === 'free' ? 'none' : '';
   if (mode !== 'free') applyGridPreset(mode);
   buildDragOverlay();
   triggerPreview();
+}
+
+function toggleGridOverlay() {
+  showGrid = !showGrid;
+  const btn = document.getElementById('btn-grid-toggle');
+  if (btn) btn.classList.toggle('active', showGrid);
+  const svg = document.getElementById('grid-svg');
+  if (svg) svg.style.display = showGrid ? '' : 'none';
 }
 
 function applyGridPreset(mode) {
@@ -566,6 +580,69 @@ function buildDragOverlay() {
     handle.addEventListener('touchstart', e => startDrag(e, handle, xInput, yInput, scaleX, scaleY), {passive: false});
     overlay.appendChild(handle);
   });
+
+  drawGridOverlay();
+}
+
+function drawGridOverlay() {
+  const existing = document.getElementById('grid-svg');
+  if (existing) existing.remove();
+  const overlay = document.getElementById('drag-overlay');
+  const img     = document.getElementById('preview-img');
+  if (!overlay || !img || !img.offsetWidth || gridMode === 'free') return;
+
+  const W  = img.offsetWidth;
+  const H  = img.offsetHeight;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.id = 'grid-svg';
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;';
+  if (!showGrid) svg.style.display = 'none';
+
+  function mkLine(x1, y1, x2, y2, strong, dashed) {
+    const l = document.createElementNS(ns, 'line');
+    l.setAttribute('x1', Math.round(x1)); l.setAttribute('y1', Math.round(y1));
+    l.setAttribute('x2', Math.round(x2)); l.setAttribute('y2', Math.round(y2));
+    l.setAttribute('stroke', strong ? 'rgba(255,255,255,.65)' : 'rgba(255,255,255,.30)');
+    l.setAttribute('stroke-width', strong ? '1.5' : '1');
+    if (dashed) l.setAttribute('stroke-dasharray', '5 4');
+    svg.appendChild(l);
+  }
+  function mkRect(x, y, w, h) {
+    const r = document.createElementNS(ns, 'rect');
+    r.setAttribute('x', Math.round(x)); r.setAttribute('y', Math.round(y));
+    r.setAttribute('width', Math.round(w)); r.setAttribute('height', Math.round(h));
+    r.setAttribute('stroke', 'rgba(255,255,255,.50)');
+    r.setAttribute('stroke-width', '1.5');
+    r.setAttribute('fill', 'rgba(255,255,255,.05)');
+    svg.appendChild(r);
+  }
+
+  if (gridMode === 'grid_h') {
+    // Línea separadora: zona de identidad (arriba) vs tabla de QSO (abajo)
+    mkLine(0, .58*H, W, .58*H, true, false);
+    // Caja de la tabla
+    const tL = .04*W, tR = .97*W;
+    const rY = [.63, .74, .85, .96].map(f => f*H);
+    mkRect(tL, rY[0], tR-tL, rY[3]-rY[0]);
+    // Divisores de columna (punteados)
+    [.26, .44, .60, .76].forEach(f => mkLine(f*W, rY[0], f*W, rY[3], false, true));
+    // Divisores de fila (punteados)
+    mkLine(tL, rY[1], tR, rY[1], false, true);
+    mkLine(tL, rY[2], tR, rY[2], false, true);
+
+  } else if (gridMode === 'grid_v') {
+    // Línea separadora bajo el indicativo
+    mkLine(0, .21*H, W, .21*H, true, false);
+    // Divisor central vertical
+    mkLine(.50*W, .21*H, .50*W, .98*H, true, false);
+    // Divisores de fila horizontales (punteados)
+    [.28, .40, .52, .64, .76, .87, .95].forEach(f => mkLine(0, f*H, W, f*H, false, true));
+  }
+
+  overlay.appendChild(svg);
 }
 
 // ── Drag individual ───────────────────────────────────────────────────────────
