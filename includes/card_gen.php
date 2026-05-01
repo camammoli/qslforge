@@ -1,6 +1,62 @@
 <?php
 require_once __DIR__ . '/adif.php';
 
+function draw_grid_on_card($img, int $W, int $H, array $template): void {
+    $mode    = $template['grid_mode']  ?? 'free';
+    $draw    = $template['grid_draw']  ?? false;
+    $hex     = ltrim($template['grid_color'] ?? '#ffffff', '#');
+    $opacity = max(10, min(90, (int)($template['grid_alpha'] ?? 50)));
+
+    if (!$draw || $mode === 'free') return;
+
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+
+    imagealphablending($img, true);
+    // GD alpha: 0=opaque, 127=transparent
+    $aMain = (int)round((1 - $opacity / 100) * 127);
+    $aFill = min(127, $aMain + 50);
+    $cMain = imagecolorallocatealpha($img, $r, $g, $b, $aMain);
+    $cFill = imagecolorallocatealpha($img, $r, $g, $b, $aFill);
+
+    if ($mode === 'grid_h') {
+        // Separator line between identity area and data table
+        imagesetthickness($img, 2);
+        imageline($img, 0, (int)(.58*$H), $W, (int)(.58*$H), $cMain);
+
+        $tL  = (int)(.04*$W);  $tR  = (int)(.97*$W);
+        $rY  = [(int)(.63*$H), (int)(.74*$H), (int)(.85*$H), (int)(.96*$H)];
+
+        // Subtle fill inside the table area
+        imagefilledrectangle($img, $tL, $rY[0], $tR, $rY[3], $cFill);
+        // Table border
+        imagesetthickness($img, 2);
+        imagerectangle($img, $tL, $rY[0], $tR, $rY[3], $cMain);
+        // Column dividers
+        imagesetthickness($img, 1);
+        foreach ([.26, .44, .60, .76] as $f) {
+            $x = (int)($f * $W);
+            imageline($img, $x, $rY[0], $x, $rY[3], $cMain);
+        }
+        // Row dividers
+        imageline($img, $tL, $rY[1], $tR, $rY[1], $cMain);
+        imageline($img, $tL, $rY[2], $tR, $rY[2], $cMain);
+
+    } elseif ($mode === 'grid_v') {
+        // Separator after callsign
+        imagesetthickness($img, 2);
+        imageline($img, 0, (int)(.21*$H), $W, (int)(.21*$H), $cMain);
+        // Center vertical divider
+        imageline($img, (int)(.50*$W), (int)(.21*$H), (int)(.50*$W), (int)(.98*$H), $cMain);
+        // Horizontal row lines
+        imagesetthickness($img, 1);
+        foreach ([.28, .40, .52, .64, .76, .87, .95] as $f) {
+            imageline($img, 0, (int)($f*$H), $W, (int)($f*$H), $cMain);
+        }
+    }
+}
+
 function generate_card(string $bg_path, array $qso, array $template, string $out_path): bool {
     // Load background
     $info = @getimagesize($bg_path);
@@ -35,6 +91,10 @@ function generate_card(string $bg_path, array $qso, array $template, string $out
     }
 
     if (!$img) return false;
+
+    $W = imagesx($img);
+    $H = imagesy($img);
+    draw_grid_on_card($img, $W, $H, $template);
 
     $fields = $template['fields'] ?? [];
 

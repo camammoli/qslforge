@@ -124,6 +124,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $tpl['fields'][$f]['prefix']  = substr($_POST['prefix_' . $f] ?? ($tpl['fields'][$f]['prefix'] ?? ''), 0, 50);
         if ($f === 'CUSTOM') $tpl['fields'][$f]['custom_text'] = substr($_POST['custom_text'] ?? ($tpl['fields'][$f]['custom_text'] ?? ''), 0, 200);
     }
+    $tpl['grid_mode']  = in_array($_POST['grid_mode'] ?? '', ['free','grid_h','grid_v']) ? $_POST['grid_mode'] : 'free';
+    $tpl['grid_draw']  = !empty($_POST['grid_draw']);
+    $gc = $_POST['grid_color'] ?? '';
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $gc)) $tpl['grid_color'] = $gc;
+    $tpl['grid_alpha'] = max(10, min(90, (int)($_POST['grid_alpha'] ?? 50)));
     $_SESSION['gen_template'] = $tpl;
 
     // Save template if requested
@@ -356,6 +361,28 @@ document.getElementById('bg-input').addEventListener('change', function() {
         : 'Arrastrá los puntos azules para reposicionar campos. En modo grilla, arrastrá <b>⠿</b> para mover todo junto.' ?>
     </div>
 
+    <!-- Opciones de grilla en la tarjeta final -->
+    <input type="hidden" name="grid_mode" id="grid_mode_input" value="free">
+    <div id="grid-draw-opts" class="mt-2 p-2 rounded d-none" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)">
+      <div class="d-flex align-items-center flex-wrap gap-3">
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" name="grid_draw" id="grid_draw" value="1" onchange="triggerPreview()">
+          <label class="form-check-label small" for="grid_draw">
+            <?= t('lang_switch_code')==='en' ? 'Draw grid on final card' : 'Dibujar grilla en la tarjeta' ?>
+          </label>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <label class="form-label small mb-0"><?= t('lang_switch_code')==='en'?'Color':'Color' ?></label>
+          <input type="color" name="grid_color" id="grid_color" value="#ffffff" class="form-control form-control-color p-0 border-0" style="width:28px;height:28px;cursor:pointer" oninput="triggerPreview()">
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <label class="form-label small mb-0"><?= t('lang_switch_code')==='en'?'Opacity':'Opacidad' ?></label>
+          <input type="range" name="grid_alpha" id="grid_alpha" min="10" max="90" value="50" class="form-range" style="width:80px" oninput="document.getElementById('grid_alpha_val').textContent=this.value+'%';triggerPreview()">
+          <span id="grid_alpha_val" class="small text-muted">50%</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Warnings validación -->
     <div id="step2-warnings" class="mt-3 d-none"></div>
   </div>
@@ -507,6 +534,10 @@ function setLayoutMode(mode) {
   });
   const toggleBtn = document.getElementById('btn-grid-toggle');
   if (toggleBtn) toggleBtn.style.display = mode === 'free' ? 'none' : '';
+  const modeInput = document.getElementById('grid_mode_input');
+  if (modeInput) modeInput.value = mode;
+  const gridOpts = document.getElementById('grid-draw-opts');
+  if (gridOpts) gridOpts.classList.toggle('d-none', mode === 'free');
   if (mode !== 'free') applyGridPreset(mode);
   buildDragOverlay();
   triggerPreview();

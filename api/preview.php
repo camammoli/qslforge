@@ -29,6 +29,12 @@ foreach ($fields as $f) {
     if ($f === 'CUSTOM') $template['fields'][$f]['custom_text'] = substr($_POST['custom_text'] ?? ($template['fields'][$f]['custom_text'] ?? ''), 0, 200);
 }
 
+$template['grid_mode']  = in_array($_POST['grid_mode'] ?? '', ['free','grid_h','grid_v']) ? $_POST['grid_mode'] : ($template['grid_mode'] ?? 'free');
+$template['grid_draw']  = !empty($_POST['grid_draw']);
+$gcolor = $_POST['grid_color'] ?? '';
+if (preg_match('/^#[0-9a-fA-F]{6}$/', $gcolor)) $template['grid_color'] = $gcolor;
+$template['grid_alpha'] = max(10, min(90, (int)($_POST['grid_alpha'] ?? $template['grid_alpha'] ?? 50)));
+
 $out = generate_preview($bg, $qso, $template);
 if (!$out) { echo json_encode(['ok'=>false,'error'=>t('err_generate')]); exit; }
 

@@ -125,6 +125,10 @@ function font_path(string $key): string {
 
 function default_template(): array {
     return [
+        'grid_mode'  => 'free',
+        'grid_draw'  => false,
+        'grid_color' => '#ffffff',
+        'grid_alpha' => 50,
         'fields' => [
             'CALL'       => ['visible'=>true,  'x'=>540, 'y'=>180, 'size'=>52, 'color'=>'#ffffff', 'font'=>'roboto-bold',  'align'=>'center', 'prefix'=>''],
             'QSO_DATE'   => ['visible'=>true,  'x'=>100, 'y'=>300, 'size'=>22, 'color'=>'#ffffff', 'font'=>'roboto',       'align'=>'left',   'prefix'=>'Date: '],
