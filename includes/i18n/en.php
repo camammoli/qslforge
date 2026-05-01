@@ -98,6 +98,7 @@
     'email_subject_def' => 'QSL card from {callsign}',
     'email_body_label'  => 'Email body',
     'email_body_def'    => "Dear {name},\n\nPlease find attached my QSL card confirming our QSO on {date} — {band} {mode}.\n\n73 de {callsign}",
+    'email_body_multi'  => "Dear {name},\n\nPlease find attached my {n} QSL cards confirming our QSOs.\n\n73 from {callsign}",
     'email_send_btn'    => 'Send emails',
     'email_sending'     => 'Sending…',
     'email_done'        => '{n} emails sent successfully.',

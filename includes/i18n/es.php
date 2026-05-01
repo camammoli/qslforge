@@ -90,6 +90,7 @@
     'email_subject_def' => 'Tarjeta QSL de {callsign}',
     'email_body_label'  => 'Texto del email',
     'email_body_def'    => "Estimado {name},\n\nAdjunto mi tarjeta QSL confirmando nuestro QSO del {date} — {band} {mode}.\n\n73 de {callsign}",
+    'email_body_multi'  => "Estimado {name},\n\nTe mando mis {n} tarjetas QSL confirmando nuestros QSOs.\n\n73 de {callsign}",
     'email_send_btn'    => 'Enviar emails',
     'email_sending'     => 'Enviando…',
     'email_done'        => '{n} emails enviados correctamente.',

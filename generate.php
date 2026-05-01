@@ -670,9 +670,9 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
       <table class="table table-sm mb-0 small" id="qso-list-table">
         <thead><tr><th></th><th>Call</th><th>Date</th><th>Band</th><th>Mode</th></tr></thead>
         <tbody>
-          <?php foreach ($qsos as $q): ?>
+          <?php foreach ($qsos as $idx => $q): ?>
           <tr>
-            <td><input type="checkbox" class="form-check-input qso-chk" data-call="<?= h($q['CALL'] ?? '') ?>" checked onchange="updateQsoCount()"></td>
+            <td><input type="checkbox" class="form-check-input qso-chk" data-call="<?= h($q['CALL'] ?? '') ?>" data-idx="<?= $idx ?>" checked onchange="updateQsoCount()"></td>
             <td class="fw-semibold"><?= h($q['CALL'] ?? '') ?></td>
             <td><?= h(fmt_date_adif($q['QSO_DATE'] ?? '')) ?></td>
             <td><?= h($q['BAND'] ?? '') ?></td>
@@ -697,10 +697,16 @@ let batchMode = 'zip';
 const qsos = <?= json_encode(array_map(fn($q) => ['call' => $q['CALL'] ?? '', 'name' => $q['NAME'] ?? '', 'email' => ''], $qsos)) ?>;
 const labelSelected = '<?= t('lang_switch_code') === 'en' ? 'selected' : 'seleccionados' ?>';
 
+function getSelectedIndices() {
+  const indices = [];
+  document.querySelectorAll('.qso-chk:checked').forEach(chk => indices.push(parseInt(chk.dataset.idx)));
+  return indices;
+}
+
 function getSelectedCalls() {
-  const calls = [];
-  document.querySelectorAll('.qso-chk:checked').forEach(chk => calls.push(chk.dataset.call));
-  return [...new Set(calls)];
+  const calls = new Set();
+  document.querySelectorAll('.qso-chk:checked').forEach(chk => calls.add(chk.dataset.call));
+  return [...calls];
 }
 
 function updateQsoCount() {
@@ -718,8 +724,8 @@ function selectQsos(mode) {
 }
 
 function generateBatch(mode) {
-  const selectedCalls = getSelectedCalls();
-  if (selectedCalls.length === 0) {
+  const selectedIndices = getSelectedIndices();
+  if (selectedIndices.length === 0) {
     alert('<?= addslashes(t('warn_no_qsos')) ?>');
     return;
   }
@@ -729,7 +735,7 @@ function generateBatch(mode) {
   fetch('<?= APP_URL ?>/api/generate.php', {
     method: 'POST',
     headers: {'X-CSRF-Token': '<?= csrf_token() ?>','Content-Type':'application/json'},
-    body: JSON.stringify({action: 'generate', calls: selectedCalls})
+    body: JSON.stringify({action: 'generate', indices: selectedIndices})
   })
   .then(r => r.json())
   .then(d => {
