@@ -26,6 +26,7 @@ define('OUTPUT_DIR', $_qslf_tmp . 'output/');
 define('MAX_ADIF_MB',  10);
 define('MAX_IMG_MB',   20);
 define('OUTPUT_TTL',   3600 * 4); // ZIPs se eliminan a las 4 horas
+define('LOG_FILE',    $_qslf_tmp . 'security.log');
 
 date_default_timezone_set('UTC');
 ini_set('session.cookie_httponly', 1);

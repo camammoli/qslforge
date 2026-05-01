@@ -127,6 +127,7 @@
     // Errors / validation
     'err_adif_required' => 'Please select an ADIF file.',
     'err_bg_required'   => 'Please select a background image.',
+    'err_adif_invalid'  => 'The file does not appear to be a valid ADIF log. The incident has been recorded.',
     'err_adif_empty'    => 'The ADIF file contains no valid QSOs.',
     'err_adif_toolarge' => 'ADIF file exceeds the maximum allowed size.',
     'err_bg_toolarge'   => 'Background image exceeds the maximum allowed size.',

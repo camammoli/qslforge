@@ -117,6 +117,7 @@
 
     'err_adif_required' => 'Seleccioná un archivo ADIF.',
     'err_bg_required'   => 'Seleccioná una imagen de fondo.',
+    'err_adif_invalid'  => 'El archivo no parece ser un log ADIF válido. El incidente fue registrado.',
     'err_adif_empty'    => 'El archivo ADIF no contiene QSOs válidos.',
     'err_adif_toolarge' => 'El archivo ADIF supera el tamaño máximo permitido.',
     'err_bg_toolarge'   => 'La imagen de fondo supera el tamaño máximo permitido.',

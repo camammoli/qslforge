@@ -1,4 +1,9 @@
 <?php
+function adif_looks_valid(string $content): bool {
+    // Must contain at least one ADIF field tag <NAME:N>
+    return (bool)preg_match('/<[A-Za-z_][A-Za-z_0-9]*:\d+>/i', $content);
+}
+
 function adif_parse(string $content): array {
     $qsos = [];
     // Skip header (everything before <EOH>)

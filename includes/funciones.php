@@ -1,6 +1,15 @@
 <?php
 function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
 
+function security_log(string $event, array $ctx = []): void {
+    if (!defined('LOG_FILE')) return;
+    $dir = dirname(LOG_FILE);
+    if (!is_dir($dir)) @mkdir($dir, 0750, true);
+    $line = date('Y-m-d H:i:s') . ' | ' . ($_SERVER['REMOTE_ADDR'] ?? '-') . ' | ' . $event;
+    if ($ctx) $line .= ' | ' . json_encode($ctx, JSON_UNESCAPED_UNICODE);
+    @file_put_contents(LOG_FILE, $line . "\n", FILE_APPEND | LOCK_EX);
+}
+
 function flash(string $type, string $msg): void {
     $_SESSION['flash'][] = ['type' => $type, 'msg' => $msg];
 }

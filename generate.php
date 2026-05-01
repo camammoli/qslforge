@@ -37,14 +37,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     } elseif ($bg_file['size'] > MAX_IMG_MB * 1024 * 1024) {
         $error = t('err_bg_toolarge');
     } else {
-        $mime = mime_content_type($bg_file['tmp_name']);
-        if (!in_array($mime, ['image/jpeg','image/png']) || !getimagesize($bg_file['tmp_name'])) {
-            $error = t('err_bg_invalid');
+        // Validate ADIF content has recognizable ADIF markers
+        $adif_content = file_get_contents($adif_file['tmp_name']);
+        if (!adif_looks_valid($adif_content)) {
+            security_log('invalid_adif_content', ['name' => $adif_file['name'], 'size' => $adif_file['size']]);
+            $error = t('err_adif_invalid');
         } else {
+            $mime = mime_content_type($bg_file['tmp_name']);
+            if (!in_array($mime, ['image/jpeg','image/png'])) {
+                security_log('invalid_image_mime', ['name' => $bg_file['name'], 'mime' => $mime]);
+                $error = t('err_bg_invalid');
+            } else {
+            // Re-process image through GD: strips metadata and ensures it's a valid image
+            $img = $mime === 'image/png'
+                ? @imagecreatefrompng($bg_file['tmp_name'])
+                : @imagecreatefromjpeg($bg_file['tmp_name']);
+            if (!$img) {
+                security_log('invalid_image_gd', ['name' => $bg_file['name'], 'mime' => $mime]);
+                $error = t('err_bg_invalid');
+            } else {
             // Parse ADIF
-            $adif_content = file_get_contents($adif_file['tmp_name']);
             $qsos = adif_parse($adif_content);
             if (empty($qsos)) {
+                imagedestroy($img);
                 $error = t('err_adif_empty');
             } else {
                 // Save files to uploads/session/
@@ -54,7 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 $bg_ext  = $mime === 'image/png' ? 'png' : 'jpg';
                 $bg_dest = $upload_path . 'background.' . $bg_ext;
-                move_uploaded_file($bg_file['tmp_name'], $bg_dest);
+                if ($mime === 'image/png') {
+                    imagepng($img, $bg_dest, 6);
+                } else {
+                    imagejpeg($img, $bg_dest, 92);
+                }
+                imagedestroy($img);
 
                 $_SESSION['gen_qsos']    = $qsos;
                 $_SESSION['gen_bg']      = $bg_dest;
@@ -79,7 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 header('Location: ' . APP_URL . '/generate.php?step=2');
                 exit;
             }
-        }
+            } // end if (!$img)
+            } // end if (!in_array mime)
+        } // end if (!adif_looks_valid)
     }
     $step = 1;
 }
@@ -813,6 +835,8 @@ let batchUuid = null;
 let batchMode = 'zip';
 const qsos = <?= json_encode(array_map(fn($q) => ['call' => $q['CALL'] ?? '', 'name' => $q['NAME'] ?? '', 'email' => ''], $qsos)) ?>;
 const labelSelected = '<?= t('lang_switch_code') === 'en' ? 'selected' : 'seleccionados' ?>';
+const emailBodyDef   = <?= json_encode(t('email_body_def',   ['name'=>'{name}','date'=>'{date}','band'=>'{band}','mode'=>'{mode}','callsign'=>usuario_actual()['callsign'] ?? 'N0CALL'])) ?>;
+const emailBodyMulti = <?= json_encode(t('email_body_multi', ['name'=>'{name}','n'=>'{n}','callsign'=>usuario_actual()['callsign'] ?? 'N0CALL'])) ?>;
 
 function getSelectedIndices() {
   const indices = [];
@@ -890,15 +914,29 @@ function buildEmailContacts(selectedCalls) {
   const el = document.getElementById('email-contacts');
   const seen = {};
   const rows = [];
+  const callCount = {};
   qsos.forEach(q => {
-    if (seen[q.call] || !selectedCalls.includes(q.call)) return;
+    if (!selectedCalls.includes(q.call)) return;
+    callCount[q.call] = (callCount[q.call] || 0) + 1;
+    if (seen[q.call]) return;
     seen[q.call] = 1;
     rows.push(q);
   });
-  let html = '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th>Callsign</th><th>Email</th></tr></thead><tbody>';
+
+  // Adapt email body template based on whether any callsign has multiple cards
+  const hasMulti = Object.values(callCount).some(n => n > 1);
+  const bodyEl = document.getElementById('email-body');
+  if (bodyEl && !bodyEl.dataset.userEdited) {
+    bodyEl.value = hasMulti ? emailBodyMulti : emailBodyDef;
+  }
+  bodyEl && bodyEl.addEventListener('input', () => { bodyEl.dataset.userEdited = '1'; }, {once: true});
+
+  let html = '<div class="table-responsive"><table class="table table-sm small mb-0"><thead><tr><th>Callsign</th><th><?= t('lang_switch_code') === 'en' ? 'Cards' : 'Tarjetas' ?></th><th>Email</th></tr></thead><tbody>';
   rows.forEach(q => {
+    const n = callCount[q.call] || 1;
     html += '<tr>';
     html += '<td class="fw-semibold">' + q.call + '</td>';
+    html += '<td class="text-muted">' + n + '</td>';
     html += '<td><input type="email" class="form-control form-control-sm email-dest" data-call="' + q.call + '" data-name="' + (q.name||q.call) + '" placeholder="(skip)"></td></tr>';
   });
   html += '</tbody></table></div>';
