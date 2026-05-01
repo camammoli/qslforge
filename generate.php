@@ -284,11 +284,18 @@ document.getElementById('bg-input').addEventListener('change', function() {
   <!-- Preview col -->
   <div class="col-lg-7">
     <div class="card shadow-sm">
-      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span><i class="bi bi-eye me-2"></i>Preview — <?= h($first['CALL'] ?? 'N0CALL') ?></span>
-        <button class="btn btn-sm btn-outline-secondary" id="btn-preview" onclick="loadPreview()">
-          <i class="bi bi-arrow-clockwise me-1"></i><?= t('preview_btn') ?>
-        </button>
+        <div class="d-flex align-items-center gap-2">
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-secondary active" id="mode-free"   onclick="setLayoutMode('free')"   title="<?= t('lang_switch_code')==='en'?'Free positioning':'Posicionamiento libre' ?>"><i class="bi bi-arrows-move"></i></button>
+            <button type="button" class="btn btn-outline-secondary"        id="mode-grid-h" onclick="setLayoutMode('grid_h')" title="<?= t('lang_switch_code')==='en'?'Horizontal grid':'Grilla horizontal' ?>"><i class="bi bi-list-columns-reverse"></i></button>
+            <button type="button" class="btn btn-outline-secondary"        id="mode-grid-v" onclick="setLayoutMode('grid_v')" title="<?= t('lang_switch_code')==='en'?'Vertical grid':'Grilla vertical' ?>"><i class="bi bi-layout-three-columns"></i></button>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" id="btn-preview" onclick="loadPreview()">
+            <i class="bi bi-arrow-clockwise me-1"></i><?= t('preview_btn') ?>
+          </button>
+        </div>
       </div>
       <div class="card-body text-center p-2" style="background:#111;min-height:300px;border-radius:0 0 .375rem .375rem">
         <div id="preview-loading" class="text-muted py-4 d-none">
@@ -314,31 +321,71 @@ document.getElementById('bg-input').addEventListener('change', function() {
       ]) ?>
     </div>
 
+    <div class="text-muted small mt-1 text-center" id="drag-hint" style="display:none">
+      <i class="bi bi-arrows-move me-1 text-primary"></i>
+      <?= t('lang_switch_code')==='en'
+        ? 'Drag the blue dots to reposition fields. In grid mode, drag <b>⠿</b> to move everything at once.'
+        : 'Arrastrá los puntos azules para reposicionar campos. En modo grilla, arrastrá <b>⠿</b> para mover todo junto.' ?>
+    </div>
+
     <!-- Warnings validación -->
     <div id="step2-warnings" class="mt-3 d-none"></div>
   </div>
 </div>
 
 <style>
+/* ── Handles individuales: puntos pequeños con tooltip ── */
 .drag-handle {
   position: absolute;
-  background: rgba(37,99,235,.85);
+  width: 14px; height: 14px;
+  background: rgba(37,99,235,.75);
+  border: 1.5px solid rgba(255,255,255,.9);
+  border-radius: 3px;
+  cursor: grab;
+  user-select: none;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 10;
+  transition: background .12s, transform .1s;
+}
+.drag-handle::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,.82);
   color: #fff;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+}
+.drag-handle:hover { background: rgba(29,78,216,.95); transform: translate(-50%,-50%) scale(1.5); }
+.drag-handle:hover::after { opacity: 1; }
+.drag-handle.dragging { cursor: grabbing !important; background: #f59e0b; z-index: 100; transform: translate(-50%,-50%) scale(1.3); }
+/* ── Handle de grilla: mueve todo junto ── */
+.grid-move-handle {
+  position: absolute;
+  top: 4px; left: 4px;
+  background: rgba(245,158,11,.9);
+  color: #000;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 5px;
   cursor: grab;
   user-select: none;
-  white-space: nowrap;
-  transform: translate(-50%, -100%);
   pointer-events: auto;
-  line-height: 1.6;
-  box-shadow: 0 1px 4px rgba(0,0,0,.4);
-  z-index: 10;
+  z-index: 20;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3);
 }
-.drag-handle:hover { background: rgba(29,78,216,1); }
-.drag-handle.dragging { cursor: grabbing !important; background: #f59e0b; color: #000; z-index: 100; }
+.grid-move-handle:hover { background: #f59e0b; }
+.grid-move-handle.dragging { cursor: grabbing !important; }
+/* ── Guías de snap ── */
 .snap-guide { position: absolute; opacity: 0; pointer-events: none; transition: opacity .08s; z-index: 50; }
 .snap-guide-v { top: 0; bottom: 0; width: 1px; background: #f59e0b; }
 .snap-guide-h { left: 0; right: 0; height: 1px; background: #f59e0b; }
@@ -346,6 +393,28 @@ document.getElementById('bg-input').addEventListener('change', function() {
 <script>
 let previewTimer;
 let isDragging = false;
+let gridMode   = 'free';
+let dragState  = null;
+const SNAP_PX  = 8;
+
+// Posiciones predefinidas (fracción de ancho/alto de la imagen)
+const GRID_PRESETS = {
+  grid_h: {
+    CALL:[.04,.07],QSO_DATE:[.04,.20],TIME_ON:[.36,.20],BAND:[.57,.20],FREQ:[.74,.20],
+    MODE:[.04,.32],RST_SENT:[.36,.32],RST_RCVD:[.57,.32],
+    NAME:[.04,.44],QTH:[.44,.44],GRIDSQUARE:[.04,.56],OPERATOR:[.44,.56],
+    COMMENT:[.04,.68],CUSTOM:[.04,.80],
+  },
+  grid_v: {
+    CALL:[.04,.07],
+    QSO_DATE:[.04,.22],NAME:[.52,.22],
+    TIME_ON:[.04,.34],QTH:[.52,.34],
+    BAND:[.04,.46],GRIDSQUARE:[.52,.46],
+    MODE:[.04,.58],OPERATOR:[.52,.58],
+    FREQ:[.04,.70],COMMENT:[.52,.70],
+    RST_SENT:[.04,.82],RST_RCVD:[.28,.82],CUSTOM:[.52,.82],
+  }
+};
 
 function triggerPreview() {
   if (isDragging) return;
@@ -367,7 +436,7 @@ function loadPreview() {
       document.getElementById('preview-loading').classList.add('d-none');
       if (d.ok) {
         const img = document.getElementById('preview-img');
-        img.onload = buildDragOverlay;
+        img.onload = () => { buildDragOverlay(); document.getElementById('drag-hint').style.display = ''; };
         img.src = 'data:' + d.mime + ';base64,' + d.data;
         img.style.display = '';
       } else {
@@ -381,10 +450,34 @@ function loadPreview() {
     });
 }
 
-// ── Editor visual con drag & drop ────────────────────────────────────────────
-const SNAP_PX = 8;
-let dragState = null;
+// ── Modos de layout ───────────────────────────────────────────────────────────
+function setLayoutMode(mode) {
+  gridMode = mode;
+  ['free','grid-h','grid-v'].forEach(m => {
+    const btn = document.getElementById('mode-' + m);
+    if (btn) btn.classList.toggle('active', m === mode.replace('_','-'));
+  });
+  if (mode !== 'free') applyGridPreset(mode);
+  buildDragOverlay();
+  triggerPreview();
+}
 
+function applyGridPreset(mode) {
+  const img = document.getElementById('preview-img');
+  if (!img || !img.naturalWidth) return;
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const layout = GRID_PRESETS[mode] || {};
+  document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
+    const f = cb.name.replace('vis_', '');
+    if (!layout[f]) return;
+    const xi = document.querySelector('[name="x_' + f + '"]');
+    const yi = document.querySelector('[name="y_' + f + '"]');
+    if (xi) xi.value = Math.round(layout[f][0] * W);
+    if (yi) yi.value = Math.round(layout[f][1] * H);
+  });
+}
+
+// ── Overlay de drag ───────────────────────────────────────────────────────────
 function buildDragOverlay() {
   const img     = document.getElementById('preview-img');
   const overlay = document.getElementById('drag-overlay');
@@ -396,6 +489,17 @@ function buildDragOverlay() {
   const scaleX = img.naturalWidth  / img.offsetWidth;
   const scaleY = img.naturalHeight / img.offsetHeight;
 
+  // Handle de grilla (mueve todos los campos a la vez)
+  if (gridMode !== 'free') {
+    const gh = document.createElement('div');
+    gh.className = 'grid-move-handle';
+    gh.innerHTML = '&#x2838; ' + (gridMode === 'grid_h' ? 'Grilla H' : 'Grilla V');
+    gh.addEventListener('mousedown',  e => startGridDrag(e, scaleX, scaleY));
+    gh.addEventListener('touchstart', e => startGridDrag(e, scaleX, scaleY), {passive: false});
+    overlay.appendChild(gh);
+  }
+
+  // Handles individuales por campo
   document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
     const field  = cb.name.replace('vis_', '');
     const xInput = document.querySelector('[name="x_' + field + '"]');
@@ -403,12 +507,11 @@ function buildDragOverlay() {
     if (!xInput || !yInput) return;
 
     const handle = document.createElement('div');
-    handle.className    = 'drag-handle';
-    handle.dataset.field = field;
-    handle.title         = field;
-    handle.textContent   = field.replace(/_/g, ' ');
-    handle.style.left    = (parseInt(xInput.value) / scaleX) + 'px';
-    handle.style.top     = (parseInt(yInput.value) / scaleY) + 'px';
+    handle.className      = 'drag-handle';
+    handle.dataset.field  = field;
+    handle.dataset.label  = field.replace(/_/g,' ');
+    handle.style.left     = (parseInt(xInput.value) / scaleX) + 'px';
+    handle.style.top      = (parseInt(yInput.value) / scaleY) + 'px';
 
     handle.addEventListener('mousedown',  e => startDrag(e, handle, xInput, yInput, scaleX, scaleY));
     handle.addEventListener('touchstart', e => startDrag(e, handle, xInput, yInput, scaleX, scaleY), {passive: false});
@@ -416,22 +519,44 @@ function buildDragOverlay() {
   });
 }
 
+// ── Drag individual ───────────────────────────────────────────────────────────
 function startDrag(e, handle, xInput, yInput, scaleX, scaleY) {
-  e.preventDefault();
-  e.stopPropagation();
+  e.preventDefault(); e.stopPropagation();
   isDragging = true;
   const isTouch = e.type === 'touchstart';
   const cx = isTouch ? e.touches[0].clientX : e.clientX;
   const cy = isTouch ? e.touches[0].clientY : e.clientY;
-
   handle.classList.add('dragging');
   dragState = {
-    handle, xInput, yInput, scaleX, scaleY, isTouch,
+    isGridDrag: false, handle, xInput, yInput, scaleX, scaleY, isTouch,
     startCX: cx, startCY: cy,
     origLeft: parseFloat(handle.style.left) || 0,
     origTop:  parseFloat(handle.style.top)  || 0,
   };
+  document.addEventListener(isTouch ? 'touchmove' : 'mousemove', onDrag,  {passive: false});
+  document.addEventListener(isTouch ? 'touchend'  : 'mouseup',   endDrag, {once: true});
+}
 
+// ── Drag de grilla completa ───────────────────────────────────────────────────
+function startGridDrag(e, scaleX, scaleY) {
+  e.preventDefault(); e.stopPropagation();
+  isDragging = true;
+  const isTouch = e.type === 'touchstart';
+  const cx = isTouch ? e.touches[0].clientX : e.clientX;
+  const cy = isTouch ? e.touches[0].clientY : e.clientY;
+  const gh = e.currentTarget;
+  gh.classList.add('dragging');
+
+  // Guardar posiciones originales de todos los campos visibles
+  const origPositions = {};
+  document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
+    const f = cb.name.replace('vis_', '');
+    const xi = document.querySelector('[name="x_' + f + '"]');
+    const yi = document.querySelector('[name="y_' + f + '"]');
+    if (xi && yi) origPositions[f] = { x: parseInt(xi.value), y: parseInt(yi.value) };
+  });
+
+  dragState = { isGridDrag: true, handle: gh, scaleX, scaleY, isTouch, startCX: cx, startCY: cy, origPositions };
   document.addEventListener(isTouch ? 'touchmove' : 'mousemove', onDrag,  {passive: false});
   document.addEventListener(isTouch ? 'touchend'  : 'mouseup',   endDrag, {once: true});
 }
@@ -439,18 +564,34 @@ function startDrag(e, handle, xInput, yInput, scaleX, scaleY) {
 function onDrag(e) {
   if (!dragState) return;
   e.preventDefault();
-  const { handle, xInput, yInput, scaleX, scaleY, isTouch, startCX, startCY, origLeft, origTop } = dragState;
-  const overlay = document.getElementById('drag-overlay');
+  const { scaleX, scaleY, isTouch, startCX, startCY } = dragState;
   const cx = isTouch ? e.touches[0].clientX : e.clientX;
   const cy = isTouch ? e.touches[0].clientY : e.clientY;
+  const overlay = document.getElementById('drag-overlay');
 
+  if (dragState.isGridDrag) {
+    const dx = (cx - startCX) * scaleX;
+    const dy = (cy - startCY) * scaleY;
+    document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
+      const f = cb.name.replace('vis_', '');
+      if (!dragState.origPositions[f]) return;
+      const xi = document.querySelector('[name="x_' + f + '"]');
+      const yi = document.querySelector('[name="y_' + f + '"]');
+      if (!xi || !yi) return;
+      xi.value = Math.max(0, Math.round(dragState.origPositions[f].x + dx));
+      yi.value = Math.max(0, Math.round(dragState.origPositions[f].y + dy));
+      const h = overlay.querySelector('[data-field="' + f + '"]');
+      if (h) { h.style.left = (parseInt(xi.value) / scaleX) + 'px'; h.style.top = (parseInt(yi.value) / scaleY) + 'px'; }
+    });
+    return;
+  }
+
+  const { handle, xInput, yInput, origLeft, origTop } = dragState;
   let newLeft = Math.max(0, Math.min(origLeft + (cx - startCX), overlay.offsetWidth));
   let newTop  = Math.max(0, Math.min(origTop  + (cy - startCY), overlay.offsetHeight));
-
   const snapped = snapPosition(newLeft, newTop, handle.dataset.field, overlay);
   newLeft = snapped.x; newTop = snapped.y;
   showGuides(snapped.guides, overlay);
-
   handle.style.left = newLeft + 'px';
   handle.style.top  = newTop  + 'px';
   xInput.value = Math.round(newLeft * scaleX);
@@ -459,8 +600,8 @@ function onDrag(e) {
 
 function endDrag() {
   if (!dragState) return;
-  const { handle, isTouch } = dragState;
-  handle.classList.remove('dragging');
+  dragState.handle.classList.remove('dragging');
+  const { isTouch } = dragState;
   document.removeEventListener(isTouch ? 'touchmove' : 'mousemove', onDrag);
   document.querySelectorAll('#drag-overlay .snap-guide').forEach(g => g.style.opacity = '0');
   dragState = null;
@@ -473,28 +614,17 @@ function snapPosition(x, y, currentField, overlay) {
   const W = overlay.offsetWidth, H = overlay.offsetHeight;
   let sx = x, sy = y;
   const guides = [];
-
-  const targetsX = [W / 2];
-  const targetsY = [H / 2];
+  const targetsX = [W / 2], targetsY = [H / 2];
   document.querySelectorAll('#drag-overlay .drag-handle').forEach(h => {
     if (h.dataset.field === currentField) return;
     targetsX.push(parseFloat(h.style.left));
     targetsY.push(parseFloat(h.style.top));
   });
-
   for (const tx of targetsX) {
-    if (Math.abs(x - tx) <= SNAP_PX) {
-      sx = tx;
-      guides.push({ type:'v', pct: tx / W * 100, isCenter: Math.abs(tx - W/2) < 1 });
-      break;
-    }
+    if (Math.abs(x - tx) <= SNAP_PX) { sx = tx; guides.push({type:'v', pct:tx/W*100, isCenter:Math.abs(tx-W/2)<1}); break; }
   }
   for (const ty of targetsY) {
-    if (Math.abs(y - ty) <= SNAP_PX) {
-      sy = ty;
-      guides.push({ type:'h', pct: ty / H * 100, isCenter: Math.abs(ty - H/2) < 1 });
-      break;
-    }
+    if (Math.abs(y - ty) <= SNAP_PX) { sy = ty; guides.push({type:'h', pct:ty/H*100, isCenter:Math.abs(ty-H/2)<1}); break; }
   }
   return { x: sx, y: sy, guides };
 }
@@ -506,25 +636,19 @@ function showGuides(guides, overlay) {
     let el = document.getElementById(id);
     if (!el) {
       el = document.createElement('div');
-      el.id = id;
-      el.className = 'snap-guide snap-guide-' + g.type;
+      el.id = id; el.className = 'snap-guide snap-guide-' + g.type;
       if (g.isCenter) el.style.background = 'rgba(245,158,11,.5)';
       overlay.appendChild(el);
     }
-    if (g.type === 'v') el.style.left = g.pct + '%';
-    else                el.style.top  = g.pct + '%';
+    if (g.type === 'v') el.style.left = g.pct + '%'; else el.style.top = g.pct + '%';
     el.style.opacity = '1';
   });
 }
 
 window.addEventListener('resize', buildDragOverlay);
-
-// Debounced update on any input change
 document.getElementById('design-form').addEventListener('input', triggerPreview);
-// Initial preview on page load
 loadPreview();
 
-// Validación antes de avanzar al step 3
 document.getElementById('design-form').addEventListener('submit', function(e) {
   const warnings = [];
   const visibles = document.querySelectorAll('input[name^="vis_"]:checked');
@@ -537,35 +661,25 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
   }
   const callVis = document.querySelector('input[name="vis_CALL"]');
   if (!callVis || !callVis.checked) warnings.push('<?= addslashes(t('warn_no_call')) ?>');
-
   const dateRaw = '<?= addslashes($first['QSO_DATE'] ?? '') ?>';
-  if (dateRaw && (dateRaw.length !== 8 || isNaN(Number(dateRaw)))) {
+  if (dateRaw && (dateRaw.length !== 8 || isNaN(Number(dateRaw))))
     warnings.push('<?= addslashes(t('warn_date_invalid', ['val' => $first['QSO_DATE'] ?? ''])) ?>');
-  }
-
   const coords = [];
   document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
     const f = cb.name.replace('vis_', '');
-    const x = parseInt(document.querySelector('[name="x_'+f+'"]')?.value || '0');
-    const y = parseInt(document.querySelector('[name="y_'+f+'"]')?.value || '0');
-    coords.push({f, x, y});
+    coords.push({f, x: parseInt(document.querySelector('[name="x_'+f+'"]')?.value||'0'), y: parseInt(document.querySelector('[name="y_'+f+'"]')?.value||'0')});
   });
   let overlap = false;
-  for (let i = 0; i < coords.length && !overlap; i++) {
-    for (let j = i+1; j < coords.length && !overlap; j++) {
-      if (Math.abs(coords[i].x - coords[j].x) < 20 && Math.abs(coords[i].y - coords[j].y) < 20) overlap = true;
-    }
-  }
+  for (let i = 0; i < coords.length && !overlap; i++)
+    for (let j = i+1; j < coords.length && !overlap; j++)
+      if (Math.abs(coords[i].x-coords[j].x)<20 && Math.abs(coords[i].y-coords[j].y)<20) overlap = true;
   if (overlap) warnings.push('<?= addslashes(t('warn_overlap')) ?>');
-
   if (warnings.length > 0) {
     e.preventDefault();
     let html = warnings.map(w => '<div class="alert alert-warning py-2 small mb-2">'+w+'</div>').join('');
     html += '<button type="submit" class="btn btn-warning btn-sm"><?= addslashes(t('warn_continue')) ?></button>';
     const el = document.getElementById('step2-warnings');
-    el.innerHTML = html;
-    el.classList.remove('d-none');
-    el.scrollIntoView({behavior:'smooth'});
+    el.innerHTML = html; el.classList.remove('d-none'); el.scrollIntoView({behavior:'smooth'});
     el.querySelector('button').addEventListener('click', () => document.getElementById('design-form').submit());
   }
 });
