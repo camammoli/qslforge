@@ -98,6 +98,7 @@ if ($action === 'generate') {
             '{band}'     => $qso['BAND'] ?? '',
             '{mode}'     => $qso['MODE'] ?? '',
             '{callsign}' => $callsign,
+            '{n}'        => count($callFiles),
         ];
         if ($body_tpl) {
             $body_text = strtr($body_tpl, $vars);

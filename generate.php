@@ -422,22 +422,41 @@ let gridMode   = 'free';
 let dragState  = null;
 const SNAP_PX  = 8;
 
-// Posiciones predefinidas (fracción de ancho/alto de la imagen)
+// Posiciones predefinidas [fracción_x, fracción_y, alineación_opcional]
+// grid_h: indicativo grande centrado arriba + tabla de datos al pie (estilo QSL clásica)
+// grid_v: indicativo centrado arriba + dos columnas de campos apilados
 const GRID_PRESETS = {
   grid_h: {
-    CALL:[.04,.07],QSO_DATE:[.04,.20],TIME_ON:[.36,.20],BAND:[.57,.20],FREQ:[.74,.20],
-    MODE:[.04,.32],RST_SENT:[.36,.32],RST_RCVD:[.57,.32],
-    NAME:[.04,.44],QTH:[.44,.44],GRIDSQUARE:[.04,.56],OPERATOR:[.44,.56],
-    COMMENT:[.04,.68],CUSTOM:[.04,.80],
+    CALL:       [.50, .14, 'center'],
+    NAME:       [.50, .26, 'center'],
+    QTH:        [.50, .34, 'center'],
+    QSO_DATE:   [.06, .68, 'left'],
+    TIME_ON:    [.26, .68, 'left'],
+    BAND:       [.44, .68, 'left'],
+    MODE:       [.60, .68, 'left'],
+    FREQ:       [.76, .68, 'left'],
+    RST_SENT:   [.06, .80, 'left'],
+    RST_RCVD:   [.26, .80, 'left'],
+    GRIDSQUARE: [.44, .80, 'left'],
+    OPERATOR:   [.62, .80, 'left'],
+    COMMENT:    [.06, .90, 'left'],
+    CUSTOM:     [.56, .90, 'left'],
   },
   grid_v: {
-    CALL:[.04,.07],
-    QSO_DATE:[.04,.22],NAME:[.52,.22],
-    TIME_ON:[.04,.34],QTH:[.52,.34],
-    BAND:[.04,.46],GRIDSQUARE:[.52,.46],
-    MODE:[.04,.58],OPERATOR:[.52,.58],
-    FREQ:[.04,.70],COMMENT:[.52,.70],
-    RST_SENT:[.04,.82],RST_RCVD:[.28,.82],CUSTOM:[.52,.82],
+    CALL:       [.50, .10, 'center'],
+    NAME:       [.06, .28, 'left'],
+    QTH:        [.52, .28, 'left'],
+    QSO_DATE:   [.06, .40, 'left'],
+    TIME_ON:    [.52, .40, 'left'],
+    BAND:       [.06, .52, 'left'],
+    MODE:       [.52, .52, 'left'],
+    RST_SENT:   [.06, .64, 'left'],
+    RST_RCVD:   [.52, .64, 'left'],
+    FREQ:       [.06, .76, 'left'],
+    GRIDSQUARE: [.52, .76, 'left'],
+    OPERATOR:   [.06, .87, 'left'],
+    COMMENT:    [.52, .87, 'left'],
+    CUSTOM:     [.06, .95, 'left'],
   }
 };
 
@@ -495,10 +514,15 @@ function applyGridPreset(mode) {
   document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
     const f = cb.name.replace('vis_', '');
     if (!layout[f]) return;
+    const [fx, fy, align] = layout[f];
     const xi = document.querySelector('[name="x_' + f + '"]');
     const yi = document.querySelector('[name="y_' + f + '"]');
-    if (xi) xi.value = Math.round(layout[f][0] * W);
-    if (yi) yi.value = Math.round(layout[f][1] * H);
+    if (xi) xi.value = Math.round(fx * W);
+    if (yi) yi.value = Math.round(fy * H);
+    if (align) {
+      const ai = document.querySelector('[name="align_' + f + '"]');
+      if (ai) ai.value = align;
+    }
   });
 }
 
