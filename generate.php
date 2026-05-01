@@ -294,7 +294,10 @@ document.getElementById('bg-input').addEventListener('change', function() {
         <div id="preview-loading" class="text-muted py-4 d-none">
           <div class="spinner-border spinner-border-sm me-2"></div><?= t('preview_loading') ?>
         </div>
-        <img id="preview-img" class="img-fluid rounded" style="max-width:100%;display:none" alt="Card preview">
+        <div id="preview-wrap" style="position:relative;display:inline-block;line-height:0;max-width:100%">
+          <img id="preview-img" class="img-fluid rounded" style="max-width:100%;display:none" alt="Card preview">
+          <div id="drag-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;pointer-events:none"></div>
+        </div>
         <div id="preview-placeholder" class="text-muted py-5 small">
           <i class="bi bi-image fs-1 d-block mb-2 opacity-25"></i>
           <?= t('preview_btn') ?>
@@ -316,12 +319,40 @@ document.getElementById('bg-input').addEventListener('change', function() {
   </div>
 </div>
 
+<style>
+.drag-handle {
+  position: absolute;
+  background: rgba(37,99,235,.85);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  pointer-events: auto;
+  line-height: 1.6;
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  z-index: 10;
+}
+.drag-handle:hover { background: rgba(29,78,216,1); }
+.drag-handle.dragging { cursor: grabbing !important; background: #f59e0b; color: #000; z-index: 100; }
+.snap-guide { position: absolute; opacity: 0; pointer-events: none; transition: opacity .08s; z-index: 50; }
+.snap-guide-v { top: 0; bottom: 0; width: 1px; background: #f59e0b; }
+.snap-guide-h { left: 0; right: 0; height: 1px; background: #f59e0b; }
+</style>
 <script>
 let previewTimer;
+let isDragging = false;
+
 function triggerPreview() {
+  if (isDragging) return;
   clearTimeout(previewTimer);
   previewTimer = setTimeout(loadPreview, 800);
 }
+
 function loadPreview() {
   const form = document.getElementById('design-form');
   const data = new FormData(form);
@@ -329,12 +360,14 @@ function loadPreview() {
   document.getElementById('preview-loading').classList.remove('d-none');
   document.getElementById('preview-placeholder').style.display = 'none';
   document.getElementById('preview-img').style.display = 'none';
+  document.getElementById('drag-overlay').style.display = 'none';
   fetch('<?= APP_URL ?>/api/preview.php', { method: 'POST', body: data })
     .then(r => r.json())
     .then(d => {
       document.getElementById('preview-loading').classList.add('d-none');
       if (d.ok) {
         const img = document.getElementById('preview-img');
+        img.onload = buildDragOverlay;
         img.src = 'data:' + d.mime + ';base64,' + d.data;
         img.style.display = '';
       } else {
@@ -347,6 +380,145 @@ function loadPreview() {
       document.getElementById('preview-placeholder').style.display = '';
     });
 }
+
+// ── Editor visual con drag & drop ────────────────────────────────────────────
+const SNAP_PX = 8;
+let dragState = null;
+
+function buildDragOverlay() {
+  const img     = document.getElementById('preview-img');
+  const overlay = document.getElementById('drag-overlay');
+  if (!img || img.style.display === 'none' || !img.naturalWidth) return;
+
+  overlay.innerHTML = '';
+  overlay.style.display = 'block';
+
+  const scaleX = img.naturalWidth  / img.offsetWidth;
+  const scaleY = img.naturalHeight / img.offsetHeight;
+
+  document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
+    const field  = cb.name.replace('vis_', '');
+    const xInput = document.querySelector('[name="x_' + field + '"]');
+    const yInput = document.querySelector('[name="y_' + field + '"]');
+    if (!xInput || !yInput) return;
+
+    const handle = document.createElement('div');
+    handle.className    = 'drag-handle';
+    handle.dataset.field = field;
+    handle.title         = field;
+    handle.textContent   = field.replace(/_/g, ' ');
+    handle.style.left    = (parseInt(xInput.value) / scaleX) + 'px';
+    handle.style.top     = (parseInt(yInput.value) / scaleY) + 'px';
+
+    handle.addEventListener('mousedown',  e => startDrag(e, handle, xInput, yInput, scaleX, scaleY));
+    handle.addEventListener('touchstart', e => startDrag(e, handle, xInput, yInput, scaleX, scaleY), {passive: false});
+    overlay.appendChild(handle);
+  });
+}
+
+function startDrag(e, handle, xInput, yInput, scaleX, scaleY) {
+  e.preventDefault();
+  e.stopPropagation();
+  isDragging = true;
+  const isTouch = e.type === 'touchstart';
+  const cx = isTouch ? e.touches[0].clientX : e.clientX;
+  const cy = isTouch ? e.touches[0].clientY : e.clientY;
+
+  handle.classList.add('dragging');
+  dragState = {
+    handle, xInput, yInput, scaleX, scaleY, isTouch,
+    startCX: cx, startCY: cy,
+    origLeft: parseFloat(handle.style.left) || 0,
+    origTop:  parseFloat(handle.style.top)  || 0,
+  };
+
+  document.addEventListener(isTouch ? 'touchmove' : 'mousemove', onDrag,  {passive: false});
+  document.addEventListener(isTouch ? 'touchend'  : 'mouseup',   endDrag, {once: true});
+}
+
+function onDrag(e) {
+  if (!dragState) return;
+  e.preventDefault();
+  const { handle, xInput, yInput, scaleX, scaleY, isTouch, startCX, startCY, origLeft, origTop } = dragState;
+  const overlay = document.getElementById('drag-overlay');
+  const cx = isTouch ? e.touches[0].clientX : e.clientX;
+  const cy = isTouch ? e.touches[0].clientY : e.clientY;
+
+  let newLeft = Math.max(0, Math.min(origLeft + (cx - startCX), overlay.offsetWidth));
+  let newTop  = Math.max(0, Math.min(origTop  + (cy - startCY), overlay.offsetHeight));
+
+  const snapped = snapPosition(newLeft, newTop, handle.dataset.field, overlay);
+  newLeft = snapped.x; newTop = snapped.y;
+  showGuides(snapped.guides, overlay);
+
+  handle.style.left = newLeft + 'px';
+  handle.style.top  = newTop  + 'px';
+  xInput.value = Math.round(newLeft * scaleX);
+  yInput.value = Math.round(newTop  * scaleY);
+}
+
+function endDrag() {
+  if (!dragState) return;
+  const { handle, isTouch } = dragState;
+  handle.classList.remove('dragging');
+  document.removeEventListener(isTouch ? 'touchmove' : 'mousemove', onDrag);
+  document.querySelectorAll('#drag-overlay .snap-guide').forEach(g => g.style.opacity = '0');
+  dragState = null;
+  isDragging = false;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(loadPreview, 300);
+}
+
+function snapPosition(x, y, currentField, overlay) {
+  const W = overlay.offsetWidth, H = overlay.offsetHeight;
+  let sx = x, sy = y;
+  const guides = [];
+
+  const targetsX = [W / 2];
+  const targetsY = [H / 2];
+  document.querySelectorAll('#drag-overlay .drag-handle').forEach(h => {
+    if (h.dataset.field === currentField) return;
+    targetsX.push(parseFloat(h.style.left));
+    targetsY.push(parseFloat(h.style.top));
+  });
+
+  for (const tx of targetsX) {
+    if (Math.abs(x - tx) <= SNAP_PX) {
+      sx = tx;
+      guides.push({ type:'v', pct: tx / W * 100, isCenter: Math.abs(tx - W/2) < 1 });
+      break;
+    }
+  }
+  for (const ty of targetsY) {
+    if (Math.abs(y - ty) <= SNAP_PX) {
+      sy = ty;
+      guides.push({ type:'h', pct: ty / H * 100, isCenter: Math.abs(ty - H/2) < 1 });
+      break;
+    }
+  }
+  return { x: sx, y: sy, guides };
+}
+
+function showGuides(guides, overlay) {
+  overlay.querySelectorAll('.snap-guide').forEach(g => g.style.opacity = '0');
+  guides.forEach(g => {
+    const id = 'sg_' + g.type + '_' + Math.round(g.pct * 10);
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'snap-guide snap-guide-' + g.type;
+      if (g.isCenter) el.style.background = 'rgba(245,158,11,.5)';
+      overlay.appendChild(el);
+    }
+    if (g.type === 'v') el.style.left = g.pct + '%';
+    else                el.style.top  = g.pct + '%';
+    el.style.opacity = '1';
+  });
+}
+
+window.addEventListener('resize', buildDragOverlay);
+
 // Debounced update on any input change
 document.getElementById('design-form').addEventListener('input', triggerPreview);
 // Initial preview on page load
@@ -366,13 +538,11 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
   const callVis = document.querySelector('input[name="vis_CALL"]');
   if (!callVis || !callVis.checked) warnings.push('<?= addslashes(t('warn_no_call')) ?>');
 
-  // Fecha inválida del primer QSO
   const dateRaw = '<?= addslashes($first['QSO_DATE'] ?? '') ?>';
   if (dateRaw && (dateRaw.length !== 8 || isNaN(Number(dateRaw)))) {
     warnings.push('<?= addslashes(t('warn_date_invalid', ['val' => $first['QSO_DATE'] ?? ''])) ?>');
   }
 
-  // Campos muy cerca: recoge x,y de todos los visibles y detecta pares con distancia < 20px
   const coords = [];
   document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
     const f = cb.name.replace('vis_', '');
@@ -396,7 +566,6 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
     el.innerHTML = html;
     el.classList.remove('d-none');
     el.scrollIntoView({behavior:'smooth'});
-    // Reactivar submit al presionar "continuar de todas formas"
     el.querySelector('button').addEventListener('click', () => document.getElementById('design-form').submit());
   }
 });
