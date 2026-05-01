@@ -25,7 +25,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $adif_file = $_FILES['adif'] ?? null;
     $bg_file   = $_FILES['background'] ?? null;
 
+    $adif_ext = strtolower(pathinfo($adif_file['name'] ?? '', PATHINFO_EXTENSION));
     if (!$adif_file || $adif_file['error'] !== UPLOAD_ERR_OK) {
+        $error = t('err_adif_required');
+    } elseif (!in_array($adif_ext, ['adi', 'adif'])) {
         $error = t('err_adif_required');
     } elseif ($adif_file['size'] > MAX_ADIF_MB * 1024 * 1024) {
         $error = t('err_adif_toolarge');
@@ -35,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $error = t('err_bg_toolarge');
     } else {
         $mime = mime_content_type($bg_file['tmp_name']);
-        if (!in_array($mime, ['image/jpeg','image/png'])) {
+        if (!in_array($mime, ['image/jpeg','image/png']) || !getimagesize($bg_file['tmp_name'])) {
             $error = t('err_bg_invalid');
         } else {
             // Parse ADIF
@@ -873,7 +876,7 @@ function generateBatch(mode) {
         dlLink.classList.remove('d-none');
       }
       if (batchMode === 'email' || batchMode === 'both') {
-        buildEmailContacts(selectedCalls);
+        buildEmailContacts(getSelectedCalls());
         document.getElementById('email-section').classList.remove('d-none');
       }
     } else {
