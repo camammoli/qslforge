@@ -67,11 +67,11 @@ if ($action === 'generate') {
     if (!filter_var($from, FILTER_VALIDATE_EMAIL)) { echo json_encode(['ok'=>false,'error'=>t('err_email')]); exit; }
     if (empty($_SESSION['gen_files']))              { echo json_encode(['ok'=>false,'error'=>t('err_session')]); exit; }
 
-    // Index files by callsign
-    $file_by_call = [];
+    // Agrupar todos los archivos por indicativo (puede haber múltiples QSOs del mismo OM)
+    $files_by_call = [];
     foreach ($_SESSION['gen_files'] as $f) {
         $call = strtoupper($f['call']);
-        if (!isset($file_by_call[$call])) $file_by_call[$call] = $f;
+        $files_by_call[$call][] = $f;
     }
 
     $yo       = usuario_actual();
@@ -84,9 +84,10 @@ if ($action === 'generate') {
         $email = trim($d['email'] ?? '');
         $name  = trim($d['name'] ?? $call);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) continue;
-        if (!isset($file_by_call[$call])) continue;
+        if (!isset($files_by_call[$call])) continue;
 
-        $qso = $file_by_call[$call]['qso'];
+        $callFiles = $files_by_call[$call];
+        $qso = $callFiles[0]['qso']; // primer QSO para el cuerpo del email
         $vars = [
             '{name}'     => $name,
             '{date}'     => fmt_date_adif($qso['QSO_DATE'] ?? ''),
@@ -94,15 +95,16 @@ if ($action === 'generate') {
             '{mode}'     => $qso['MODE'] ?? '',
             '{callsign}' => $callsign,
         ];
-        $base = $body_tpl ?: t('email_body_def', [
+        $body_text = $body_tpl ? strtr($body_tpl, $vars) : t('email_body_def', [
             'name'     => $name,
             'date'     => fmt_date_adif($qso['QSO_DATE'] ?? ''),
             'band'     => $qso['BAND'] ?? '',
             'mode'     => $qso['MODE'] ?? '',
             'callsign' => $callsign,
         ]);
-        $body_text = $body_tpl ? strtr($body_tpl, $vars) : $base;
-        $ok = send_qsl_email($email, $from, $subject, $body_text, $file_by_call[$call]['path'], $file_by_call[$call]['name']);
+        // Un solo email con todas las tarjetas de ese indicativo adjuntas
+        $attachments = array_map(fn($f) => ['path' => $f['path'], 'name' => $f['name']], $callFiles);
+        $ok = send_qsl_email_multi($email, $from, $subject, $body_text, $attachments);
         if ($ok) $sent++; else $failed[] = $call;
     }
 

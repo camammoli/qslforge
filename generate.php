@@ -578,11 +578,11 @@ document.getElementById('design-form').addEventListener('submit', function(e) {
 <div class="card shadow-sm">
   <div class="card-header fw-semibold"><i class="bi bi-archive me-2"></i><?= t('generate_title') ?></div>
   <div class="card-body">
-    <div class="alert alert-info mb-4">
+    <div class="alert alert-info mb-4" id="gen-info-banner">
       <i class="bi bi-info-circle me-2"></i>
-      <?= t('generate_info', ['n' => $summary['total'] ?? 0]) ?>
+      <?= t('generate_info_total', ['n' => $summary['total'] ?? 0]) ?>
       <div class="small mt-1 text-muted">
-        <?= $summary['calls'] ?? 0 ?> unique callsigns
+        <?= $summary['calls'] ?? 0 ?> <?= t('lang_switch_code') === 'en' ? 'unique callsigns' : 'indicativos distintos' ?>
         · <?= h($summary['bands'] ?? '') ?>
         · <?= h($summary['modes'] ?? '') ?>
       </div>
@@ -735,6 +735,12 @@ function generateBatch(mode) {
   .then(d => {
     document.getElementById('gen-progress').classList.add('d-none');
     if (d.ok) {
+      // Actualizar banner con el count real generado (no el total del ADIF)
+      const banner = document.getElementById('gen-info-banner');
+      if (banner) {
+        banner.className = 'alert alert-success mb-4';
+        banner.innerHTML = '<i class="bi bi-check-circle me-2"></i><?= addslashes(t('generated_ok', ['n' => '{n}'])) ?>'.replace('{n}', d.n);
+      }
       batchUuid = d.uuid;
       const dlLink  = document.getElementById('dl-link');
       const dlLabel = document.getElementById('dl-label');

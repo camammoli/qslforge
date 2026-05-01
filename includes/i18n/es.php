@@ -75,6 +75,8 @@
 
     'generate_title'    => 'Generá tus tarjetas QSL',
     'generate_info'     => 'Listo para generar {n} tarjetas QSL.',
+    'generate_info_total' => 'Tu log tiene {n} QSOs en total. Seleccioná los que querés en la lista.',
+    'generated_ok'      => '{n} tarjetas generadas correctamente.',
     'action_choice'     => '¿Qué querés hacer?',
     'action_zip'        => 'Descargar ZIP',
     'action_email'      => 'Enviar por email',

@@ -87,6 +87,8 @@
     'action_zip'        => 'Download ZIP',
     'action_email'      => 'Send by email',
     'action_both'       => 'Both',
+    'generate_info_total' => 'Your log has {n} QSOs in total. Select the ones you want in the list.',
+    'generated_ok'      => '{n} cards generated successfully.',
     'generating'        => 'Generating cards…',
     'download_btn'      => 'Download ZIP ({n} cards)',
     'email_section'     => 'Send by email',
