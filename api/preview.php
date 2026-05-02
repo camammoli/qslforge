@@ -29,7 +29,7 @@ foreach ($fields as $f) {
     if ($f === 'CUSTOM') $template['fields'][$f]['custom_text'] = substr($_POST['custom_text'] ?? ($template['fields'][$f]['custom_text'] ?? ''), 0, 200);
 }
 
-$template['grid_mode']  = in_array($_POST['grid_mode'] ?? '', ['free','grid_h','grid_v']) ? $_POST['grid_mode'] : ($template['grid_mode'] ?? 'free');
+$template['grid_mode']  = in_array($_POST['grid_mode'] ?? '', ['free','grid_h','grid_v','qsl_classic']) ? $_POST['grid_mode'] : ($template['grid_mode'] ?? 'free');
 $template['grid_draw']  = !empty($_POST['grid_draw']);
 $gcolor = $_POST['grid_color'] ?? '';
 if (preg_match('/^#[0-9a-fA-F]{6}$/', $gcolor)) $template['grid_color'] = $gcolor;

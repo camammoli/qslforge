@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $tpl['fields'][$f]['prefix']  = substr($_POST['prefix_' . $f] ?? ($tpl['fields'][$f]['prefix'] ?? ''), 0, 50);
         if ($f === 'CUSTOM') $tpl['fields'][$f]['custom_text'] = substr($_POST['custom_text'] ?? ($tpl['fields'][$f]['custom_text'] ?? ''), 0, 200);
     }
-    $tpl['grid_mode']  = in_array($_POST['grid_mode'] ?? '', ['free','grid_h','grid_v']) ? $_POST['grid_mode'] : 'free';
+    $tpl['grid_mode']  = in_array($_POST['grid_mode'] ?? '', ['free','grid_h','grid_v','qsl_classic']) ? $_POST['grid_mode'] : 'free';
     $tpl['grid_draw']  = !empty($_POST['grid_draw']);
     $gc = $_POST['grid_color'] ?? '';
     if (preg_match('/^#[0-9a-fA-F]{6}$/', $gc)) $tpl['grid_color'] = $gc;
@@ -318,9 +318,10 @@ document.getElementById('bg-input').addEventListener('change', function() {
         <span><i class="bi bi-eye me-2"></i>Preview — <?= h($first['CALL'] ?? 'N0CALL') ?></span>
         <div class="d-flex align-items-center gap-2">
           <div class="btn-group btn-group-sm" role="group">
-            <button type="button" class="btn btn-outline-secondary active" id="mode-free"   onclick="setLayoutMode('free')"   title="<?= t('lang_switch_code')==='en'?'Free positioning':'Posicionamiento libre' ?>"><i class="bi bi-arrows-move"></i></button>
-            <button type="button" class="btn btn-outline-secondary"        id="mode-grid-h" onclick="setLayoutMode('grid_h')" title="<?= t('lang_switch_code')==='en'?'Horizontal grid':'Grilla horizontal' ?>"><i class="bi bi-list-columns-reverse"></i></button>
-            <button type="button" class="btn btn-outline-secondary"        id="mode-grid-v" onclick="setLayoutMode('grid_v')" title="<?= t('lang_switch_code')==='en'?'Vertical grid':'Grilla vertical' ?>"><i class="bi bi-layout-three-columns"></i></button>
+            <button type="button" class="btn btn-outline-secondary active" id="mode-free"        onclick="setLayoutMode('free')"        title="<?= t('lang_switch_code')==='en'?'Free positioning':'Posicionamiento libre' ?>"><i class="bi bi-arrows-move"></i></button>
+            <button type="button" class="btn btn-outline-secondary"        id="mode-grid-h"      onclick="setLayoutMode('grid_h')"      title="<?= t('lang_switch_code')==='en'?'Horizontal grid':'Grilla horizontal' ?>"><i class="bi bi-list-columns-reverse"></i></button>
+            <button type="button" class="btn btn-outline-secondary"        id="mode-grid-v"      onclick="setLayoutMode('grid_v')"      title="<?= t('lang_switch_code')==='en'?'Vertical grid':'Grilla vertical' ?>"><i class="bi bi-layout-three-columns"></i></button>
+            <button type="button" class="btn btn-outline-secondary"        id="mode-qsl-classic" onclick="setLayoutMode('qsl_classic')" title="<?= t('lang_switch_code')==='en'?'Classic QSL table':'Tabla QSL clásica' ?>"><i class="bi bi-table"></i></button>
           </div>
           <button type="button" class="btn btn-sm btn-outline-secondary active" id="btn-grid-toggle" onclick="toggleGridOverlay()" title="<?= t('lang_switch_code')==='en'?'Show/hide grid':'Mostrar/ocultar grilla' ?>" style="display:none">
             <i class="bi bi-grid-3x3"></i>
@@ -473,6 +474,14 @@ const GRID_PRESETS = {
     COMMENT:    [.06, .90, 'left'],
     CUSTOM:     [.56, .90, 'left'],
   },
+  // qsl_classic: tabla renders CALL/DATE/TIME/BAND/MODE/RST/CUSTOM — solo posicionar campos restantes
+  qsl_classic: {
+    RST_RCVD:   [.75, .55, 'left'],
+    QTH:        [.50, .45, 'center'],
+    GRIDSQUARE: [.25, .55, 'left'],
+    OPERATOR:   [.50, .35, 'center'],
+    FREQ:       [.75, .45, 'left'],
+  },
   grid_v: {
     CALL:       [.50, .10, 'center'],
     NAME:       [.06, .28, 'left'],
@@ -528,16 +537,17 @@ function loadPreview() {
 // ── Modos de layout ───────────────────────────────────────────────────────────
 function setLayoutMode(mode) {
   gridMode = mode;
-  ['free','grid-h','grid-v'].forEach(m => {
+  ['free','grid-h','grid-v','qsl-classic'].forEach(m => {
     const btn = document.getElementById('mode-' + m);
-    if (btn) btn.classList.toggle('active', m === mode.replace('_','-'));
+    if (btn) btn.classList.toggle('active', m === mode.replace(/_/g,'-'));
   });
   const toggleBtn = document.getElementById('btn-grid-toggle');
-  if (toggleBtn) toggleBtn.style.display = mode === 'free' ? 'none' : '';
+  if (toggleBtn) toggleBtn.style.display = (mode === 'free' || mode === 'qsl_classic') ? 'none' : '';
   const modeInput = document.getElementById('grid_mode_input');
   if (modeInput) modeInput.value = mode;
   const gridOpts = document.getElementById('grid-draw-opts');
-  if (gridOpts) gridOpts.classList.toggle('d-none', mode === 'free');
+  // qsl_classic draws its own table — no need for the generic grid draw options
+  if (gridOpts) gridOpts.classList.toggle('d-none', mode === 'free' || mode === 'qsl_classic');
   if (mode !== 'free') applyGridPreset(mode);
   buildDragOverlay();
   triggerPreview();
@@ -650,6 +660,14 @@ function drawGridOverlay() {
     r.setAttribute('fill', 'rgba(255,255,255,.05)');
     svg.appendChild(r);
   }
+  function mkFill(x, y, w, h, fill, stroke) {
+    const r = document.createElementNS(ns, 'rect');
+    r.setAttribute('x', Math.round(x)); r.setAttribute('y', Math.round(y));
+    r.setAttribute('width', Math.round(w)); r.setAttribute('height', Math.round(h));
+    r.setAttribute('fill', fill); r.setAttribute('stroke', stroke);
+    r.setAttribute('stroke-width', '1');
+    svg.appendChild(r);
+  }
 
   if (gridMode === 'grid_h') {
     // Línea separadora: zona de identidad (arriba) vs tabla de QSO (abajo)
@@ -663,6 +681,20 @@ function drawGridOverlay() {
     // Divisores de fila (punteados)
     mkLine(tL, rY[1], tR, rY[1], false, true);
     mkLine(tL, rY[2], tR, rY[2], false, true);
+
+  } else if (gridMode === 'qsl_classic') {
+    const tL = .03*W, tR = .97*W, tW = tR - tL;
+    const cHeader = 'rgba(180,199,220,.85)';
+    const cData   = 'rgba(222,230,239,.85)';
+    const cBorder = 'rgba(106,138,170,1)';
+    mkFill(tL, .65*H, tW, (.73-.65)*H, cHeader, cBorder);  // title
+    mkFill(tL, .73*H, tW, (.82-.73)*H, cHeader, cBorder);  // header
+    mkFill(tL, .82*H, tW, (.91-.82)*H, cData,   cBorder);  // data
+    mkFill(tL, .91*H, tW, (.98-.91)*H, cData,   cBorder);  // footer
+    const colW = tW / 7;
+    for (let i = 1; i < 7; i++) {
+      mkLine(tL + i*colW, .73*H, tL + i*colW, .91*H, false, false);
+    }
 
   } else if (gridMode === 'grid_v') {
     // Línea separadora bajo el indicativo

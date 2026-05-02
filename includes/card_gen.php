@@ -1,6 +1,106 @@
 <?php
 require_once __DIR__ . '/adif.php';
 
+function qsl_classic_owned(): array {
+    return ['CALL','NAME','QSO_DATE','TIME_ON','FREQ','BAND','RST_SENT','MODE','CUSTOM'];
+}
+
+function draw_qsl_classic_table($img, int $W, int $H, array $qso, array $template): void {
+    $c_header = imagecolorallocate($img, 0xb4, 0xc7, 0xdc);
+    $c_data   = imagecolorallocate($img, 0xde, 0xe6, 0xef);
+    $c_border = imagecolorallocate($img, 0x6a, 0x8a, 0xaa);
+    $c_text   = imagecolorallocate($img, 0x1a, 0x2a, 0x3a);
+
+    $tL = (int)(.03 * $W);
+    $tR = (int)(.97 * $W);
+    $tW = $tR - $tL;
+
+    $y_tit0 = (int)(.65 * $H);  $y_tit1 = (int)(.73 * $H);
+    $y_hdr0 = (int)(.73 * $H);  $y_hdr1 = (int)(.82 * $H);
+    $y_dat0 = (int)(.82 * $H);  $y_dat1 = (int)(.91 * $H);
+    $y_ftr0 = (int)(.91 * $H);  $y_ftr1 = (int)(.98 * $H);
+
+    $n = 7;
+    $cx = [];
+    for ($i = 0; $i <= $n; $i++) $cx[$i] = (int)($tL + $i * $tW / $n);
+
+    $in_es   = (t('lang_switch_code') === 'en'); // target=en → currently Spanish
+    $headers = $in_es
+        ? ['DIA','MES','AÑO','UTC','MHz','R.S.T.','MODO']
+        : ['DAY','MONTH','YEAR','UTC','MHz','R.S.T.','MODE'];
+    $title_prefix = $in_es ? 'Confirmo QSO con' : 'Confirming QSO with';
+
+    $date    = $qso['QSO_DATE'] ?? '';
+    $dia     = strlen($date) === 8 ? substr($date, 6, 2) : '??';
+    $mes     = strlen($date) === 8 ? substr($date, 4, 2) : '??';
+    $ano     = strlen($date) === 8 ? substr($date, 0, 4) : '????';
+    $raw_t   = $qso['TIME_ON'] ?? '';
+    $utc     = strlen($raw_t) >= 4 ? substr($raw_t, 0, 2) . ':' . substr($raw_t, 2, 2) : $raw_t;
+    $mhz     = $qso['FREQ'] ?? ($qso['BAND'] ?? '');
+    $rst     = $qso['RST_SENT'] ?? '';
+    $modo    = $qso['MODE'] ?? '';
+    $call    = $qso['CALL'] ?? '';
+    $name    = $qso['NAME'] ?? '';
+    $custom  = $template['fields']['CUSTOM']['custom_text'] ?? '';
+    $vals    = [$dia, $mes, $ano, $utc, $mhz, $rst, $modo];
+
+    $font      = font_path('roboto');
+    $font_bold = font_path('roboto-bold');
+    $has_ttf   = function_exists('imagettftext') && file_exists($font);
+
+    $sz_title  = max(14, (int)($H * .028));
+    $sz_header = max(10, (int)($H * .019));
+    $sz_data   = max(12, (int)($H * .024));
+    $sz_footer = max(10, (int)($H * .018));
+
+    $center = function($text, $x1, $y1, $x2, $y2, $ffile, $sz, $col)
+        use ($img, $has_ttf) {
+        if ((string)$text === '') return;
+        $mx = (int)(($x1 + $x2) / 2);
+        $my = (int)(($y1 + $y2) / 2);
+        if ($has_ttf && function_exists('imagettfbbox')) {
+            $box = imagettfbbox($sz, 0, $ffile, $text);
+            $tw  = abs($box[4] - $box[0]);
+            $th  = abs($box[5] - $box[1]);
+            imagettftext($img, $sz, 0, $mx - (int)($tw/2), $my + (int)($th/2), $col, $ffile, $text);
+        } else {
+            $fn = min(5, max(1, (int)round($sz / 9)));
+            imagestring($img, $fn, $mx - (int)(strlen($text)*imagefontwidth($fn)/2),
+                $my - (int)(imagefontheight($fn)/2), $text, $col);
+        }
+    };
+
+    imagealphablending($img, true);
+    imagesetthickness($img, 1);
+
+    // Title row
+    imagefilledrectangle($img, $tL, $y_tit0, $tR, $y_tit1, $c_header);
+    imagerectangle($img, $tL, $y_tit0, $tR, $y_tit1, $c_border);
+    $title = $title_prefix . ': ' . $call . ($name ? ' – ' . $name : '');
+    $center($title, $tL, $y_tit0, $tR, $y_tit1, $font_bold, $sz_title, $c_text);
+
+    // Header row
+    imagefilledrectangle($img, $tL, $y_hdr0, $tR, $y_hdr1, $c_header);
+    for ($i = 0; $i < $n; $i++) {
+        imagerectangle($img, $cx[$i], $y_hdr0, $cx[$i+1], $y_hdr1, $c_border);
+        $center($headers[$i], $cx[$i], $y_hdr0, $cx[$i+1], $y_hdr1, $font_bold, $sz_header, $c_text);
+    }
+
+    // Data row
+    imagefilledrectangle($img, $tL, $y_dat0, $tR, $y_dat1, $c_data);
+    for ($i = 0; $i < $n; $i++) {
+        imagerectangle($img, $cx[$i], $y_dat0, $cx[$i+1], $y_dat1, $c_border);
+        $center($vals[$i], $cx[$i], $y_dat0, $cx[$i+1], $y_dat1, $font, $sz_data, $c_text);
+    }
+
+    // Footer row
+    imagefilledrectangle($img, $tL, $y_ftr0, $tR, $y_ftr1, $c_data);
+    imagerectangle($img, $tL, $y_ftr0, $tR, $y_ftr1, $c_border);
+    if ($custom !== '') {
+        $center($custom, $tL, $y_ftr0, $tR, $y_ftr1, $font, $sz_footer, $c_text);
+    }
+}
+
 function draw_grid_on_card($img, int $W, int $H, array $template): void {
     $mode    = $template['grid_mode']  ?? 'free';
     $draw    = $template['grid_draw']  ?? false;
@@ -92,14 +192,22 @@ function generate_card(string $bg_path, array $qso, array $template, string $out
 
     if (!$img) return false;
 
-    $W = imagesx($img);
-    $H = imagesy($img);
-    draw_grid_on_card($img, $W, $H, $template);
+    $W    = imagesx($img);
+    $H    = imagesy($img);
+    $mode = $template['grid_mode'] ?? 'free';
 
+    if ($mode === 'qsl_classic') {
+        draw_qsl_classic_table($img, $W, $H, $qso, $template);
+    } else {
+        draw_grid_on_card($img, $W, $H, $template);
+    }
+
+    $skip  = ($mode === 'qsl_classic') ? qsl_classic_owned() : [];
     $fields = $template['fields'] ?? [];
 
     foreach ($fields as $field => $cfg) {
         if (empty($cfg['visible'])) continue;
+        if (in_array($field, $skip)) continue;
 
         $value = $field === 'CUSTOM'
             ? ($cfg['custom_text'] ?? '')
