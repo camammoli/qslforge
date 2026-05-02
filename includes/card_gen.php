@@ -1,59 +1,114 @@
 <?php
 require_once __DIR__ . '/adif.php';
 
+function _hex_alloc_alpha($img, string $hex, int $gd_alpha): int {
+    $hex = ltrim($hex, '#');
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+    if ($gd_alpha === 0) return imagecolorallocate($img, $r, $g, $b);
+    return imagecolorallocatealpha($img, $r, $g, $b, $gd_alpha);
+}
+
+function qsl_table_presets(): array {
+    return [
+        'classic' => ['c_title'=>'#5a5a5a', 'c_header'=>'#b4c7dc', 'c_data'=>'#dee6ef', 'c_footer'=>'#dee6ef', 'c_border'=>'#6a8aaa', 'c_text_title'=>'#ffffff', 'c_text_hdr'=>'#1a2a3a', 'c_text_data'=>'#1a2a3a'],
+        'blue'    => ['c_title'=>'#0f1f3a', 'c_header'=>'#5983b0', 'c_data'=>'#d0dff0', 'c_footer'=>'#c8d8ef', 'c_border'=>'#3a6090', 'c_text_title'=>'#ffffff', 'c_text_hdr'=>'#ffffff', 'c_text_data'=>'#0f1f3a'],
+        'orange'  => ['c_title'=>'#2a1400', 'c_header'=>'#e07000', 'c_data'=>'#fff0d8', 'c_footer'=>'#ffd8b8', 'c_border'=>'#b05000', 'c_text_title'=>'#ffffff', 'c_text_hdr'=>'#ffffff', 'c_text_data'=>'#2a1400'],
+        'green'   => ['c_title'=>'#1a2a00', 'c_header'=>'#6cb800', 'c_data'=>'#e0f0a0', 'c_footer'=>'#d0e880', 'c_border'=>'#4a9000', 'c_text_title'=>'#ffffff', 'c_text_hdr'=>'#1a2a00', 'c_text_data'=>'#1a2a00'],
+        'brown'   => ['c_title'=>'#1a0a00', 'c_header'=>'#784b04', 'c_data'=>'#ffe8c0', 'c_footer'=>'#c09020', 'c_border'=>'#5a3800', 'c_text_title'=>'#ffffff', 'c_text_hdr'=>'#ffffff', 'c_text_data'=>'#1a0a00'],
+        'grey'    => ['c_title'=>'#222222', 'c_header'=>'#a0a0a0', 'c_data'=>'#e0e0e0', 'c_footer'=>'#d0d0d0', 'c_border'=>'#787878', 'c_text_title'=>'#ffffff', 'c_text_hdr'=>'#1a2a3a', 'c_text_data'=>'#1a2a3a'],
+    ];
+}
+
+function qsl_table_positions(): array {
+    return [
+        'bc' => ['tL'=>0.03, 'tR'=>0.97, 'yTop'=>0.65, 'yBot'=>0.98],
+        'bl' => ['tL'=>0.02, 'tR'=>0.60, 'yTop'=>0.65, 'yBot'=>0.98],
+        'br' => ['tL'=>0.40, 'tR'=>0.98, 'yTop'=>0.65, 'yBot'=>0.98],
+        'tc' => ['tL'=>0.03, 'tR'=>0.97, 'yTop'=>0.02, 'yBot'=>0.35],
+        'tl' => ['tL'=>0.02, 'tR'=>0.60, 'yTop'=>0.02, 'yBot'=>0.35],
+        'tr' => ['tL'=>0.40, 'tR'=>0.98, 'yTop'=>0.02, 'yBot'=>0.35],
+    ];
+}
+
 function qsl_classic_owned(): array {
     return ['CALL','NAME','QSO_DATE','TIME_ON','FREQ','BAND','RST_SENT','MODE','CUSTOM'];
 }
 
 function draw_qsl_classic_table($img, int $W, int $H, array $qso, array $template): void {
-    $c_header = imagecolorallocate($img, 0xb4, 0xc7, 0xdc);
-    $c_data   = imagecolorallocate($img, 0xde, 0xe6, 0xef);
-    $c_border = imagecolorallocate($img, 0x6a, 0x8a, 0xaa);
-    $c_text   = imagecolorallocate($img, 0x1a, 0x2a, 0x3a);
+    $all_presets = qsl_table_presets();
+    $all_pos     = qsl_table_positions();
+    $preset      = $all_presets[$template['qsl_preset'] ?? 'classic'] ?? $all_presets['classic'];
+    $pos         = $all_pos[$template['qsl_pos'] ?? 'bc']             ?? $all_pos['bc'];
+    $alpha_pct   = max(0, min(80, (int)($template['qsl_alpha'] ?? 0)));
+    $gd_alpha    = (int)round($alpha_pct / 100 * 127);
 
-    $tL = (int)(.03 * $W);
-    $tR = (int)(.97 * $W);
+    imagealphablending($img, true);
+
+    $c_title  = _hex_alloc_alpha($img, $preset['c_title'],  $gd_alpha);
+    $c_header = _hex_alloc_alpha($img, $preset['c_header'], $gd_alpha);
+    $c_data   = _hex_alloc_alpha($img, $preset['c_data'],   $gd_alpha);
+    $c_footer = _hex_alloc_alpha($img, $preset['c_footer'], $gd_alpha);
+    $c_border = _hex_alloc_alpha($img, $preset['c_border'], max(0, $gd_alpha - 30));
+
+    $alloc = function(string $hex) use ($img): int {
+        $h = ltrim($hex, '#');
+        return imagecolorallocate($img, hexdec(substr($h,0,2)), hexdec(substr($h,2,2)), hexdec(substr($h,4,2)));
+    };
+    $c_text_title = $alloc($preset['c_text_title']);
+    $c_text_hdr   = $alloc($preset['c_text_hdr']);
+    $c_text_data  = $alloc($preset['c_text_data']);
+
+    $tL = (int)($pos['tL'] * $W);
+    $tR = (int)($pos['tR'] * $W);
     $tW = $tR - $tL;
+    $tT = (int)($pos['yTop'] * $H);
+    $tB = (int)($pos['yBot'] * $H);
+    $tH = $tB - $tT;
 
-    $y_tit0 = (int)(.65 * $H);  $y_tit1 = (int)(.73 * $H);
-    $y_hdr0 = (int)(.73 * $H);  $y_hdr1 = (int)(.82 * $H);
-    $y_dat0 = (int)(.82 * $H);  $y_dat1 = (int)(.91 * $H);
-    $y_ftr0 = (int)(.91 * $H);  $y_ftr1 = (int)(.98 * $H);
+    $y_tit0 = $tT;
+    $y_tit1 = $tT + (int)($tH * 0.24);
+    $y_hdr0 = $y_tit1;
+    $y_hdr1 = $y_tit1 + (int)($tH * 0.27);
+    $y_dat0 = $y_hdr1;
+    $y_dat1 = $y_hdr1 + (int)($tH * 0.27);
+    $y_ftr0 = $y_dat1;
+    $y_ftr1 = $tB;
 
     $n = 7;
     $cx = [];
     for ($i = 0; $i <= $n; $i++) $cx[$i] = (int)($tL + $i * $tW / $n);
 
-    $in_es   = (t('lang_switch_code') === 'en'); // target=en → currently Spanish
+    $in_es   = (t('lang_switch_code') === 'en');
     $headers = $in_es
         ? ['DIA','MES','AÑO','UTC','MHz','R.S.T.','MODO']
         : ['DAY','MONTH','YEAR','UTC','MHz','R.S.T.','MODE'];
     $title_prefix = $in_es ? 'Confirmo QSO con' : 'Confirming QSO with';
 
-    $date    = $qso['QSO_DATE'] ?? '';
-    $dia     = strlen($date) === 8 ? substr($date, 6, 2) : '??';
-    $mes     = strlen($date) === 8 ? substr($date, 4, 2) : '??';
-    $ano     = strlen($date) === 8 ? substr($date, 0, 4) : '????';
-    $raw_t   = $qso['TIME_ON'] ?? '';
-    $utc     = strlen($raw_t) >= 4 ? substr($raw_t, 0, 2) . ':' . substr($raw_t, 2, 2) : $raw_t;
-    $mhz     = $qso['FREQ'] ?? ($qso['BAND'] ?? '');
-    $rst     = $qso['RST_SENT'] ?? '';
-    $modo    = $qso['MODE'] ?? '';
-    $call    = $qso['CALL'] ?? '';
-    $name    = $qso['NAME'] ?? '';
-    $custom  = $template['fields']['CUSTOM']['custom_text'] ?? '';
-    $vals    = [$dia, $mes, $ano, $utc, $mhz, $rst, $modo];
+    $date   = $qso['QSO_DATE'] ?? '';
+    $dia    = strlen($date) === 8 ? substr($date, 6, 2) : '??';
+    $mes    = strlen($date) === 8 ? substr($date, 4, 2) : '??';
+    $ano    = strlen($date) === 8 ? substr($date, 0, 4) : '????';
+    $raw_t  = $qso['TIME_ON'] ?? '';
+    $utc    = strlen($raw_t) >= 4 ? substr($raw_t, 0, 2) . ':' . substr($raw_t, 2, 2) : $raw_t;
+    $mhz    = $qso['FREQ'] ?? ($qso['BAND'] ?? '');
+    $rst    = $qso['RST_SENT'] ?? '';
+    $modo   = $qso['MODE'] ?? '';
+    $call   = $qso['CALL'] ?? '';
+    $name   = $qso['NAME'] ?? '';
+    $custom = $template['fields']['CUSTOM']['custom_text'] ?? '';
+    $vals   = [$dia, $mes, $ano, $utc, $mhz, $rst, $modo];
 
     $font      = font_path('roboto');
     $font_bold = font_path('roboto-bold');
     $has_ttf   = function_exists('imagettftext') && file_exists($font);
 
-    $sz_title  = max(14, (int)($H * .028));
-    $sz_header = max(10, (int)($H * .019));
-    $sz_data   = max(12, (int)($H * .024));
-    $sz_footer = max(10, (int)($H * .018));
+    $sz_title  = max(10, (int)($tH * 0.16));
+    $sz_header = max(8,  (int)($tH * 0.12));
+    $sz_data   = max(10, (int)($tH * 0.14));
+    $sz_footer = max(8,  (int)($tH * 0.11));
 
-    // &$img: pass by reference so drawing inside the closure affects the actual image
     $center = function($text, $x1, $y1, $x2, $y2, $ffile, $sz, $col)
         use (&$img, $has_ttf) {
         if ((string)$text === '') return;
@@ -77,34 +132,33 @@ function draw_qsl_classic_table($img, int $W, int $H, array $qso, array $templat
         }
     };
 
-    imagealphablending($img, true);
     imagesetthickness($img, 1);
 
     // Title row
-    imagefilledrectangle($img, $tL, $y_tit0, $tR, $y_tit1, $c_header);
+    imagefilledrectangle($img, $tL, $y_tit0, $tR, $y_tit1, $c_title);
     imagerectangle($img, $tL, $y_tit0, $tR, $y_tit1, $c_border);
     $title = $title_prefix . ': ' . $call . ($name ? ' – ' . $name : '');
-    $center($title, $tL, $y_tit0, $tR, $y_tit1, $font_bold, $sz_title, $c_text);
+    $center($title, $tL, $y_tit0, $tR, $y_tit1, $font_bold, $sz_title, $c_text_title);
 
     // Header row
     imagefilledrectangle($img, $tL, $y_hdr0, $tR, $y_hdr1, $c_header);
     for ($i = 0; $i < $n; $i++) {
         imagerectangle($img, $cx[$i], $y_hdr0, $cx[$i+1], $y_hdr1, $c_border);
-        $center($headers[$i], $cx[$i], $y_hdr0, $cx[$i+1], $y_hdr1, $font_bold, $sz_header, $c_text);
+        $center($headers[$i], $cx[$i], $y_hdr0, $cx[$i+1], $y_hdr1, $font_bold, $sz_header, $c_text_hdr);
     }
 
     // Data row
     imagefilledrectangle($img, $tL, $y_dat0, $tR, $y_dat1, $c_data);
     for ($i = 0; $i < $n; $i++) {
         imagerectangle($img, $cx[$i], $y_dat0, $cx[$i+1], $y_dat1, $c_border);
-        $center($vals[$i], $cx[$i], $y_dat0, $cx[$i+1], $y_dat1, $font, $sz_data, $c_text);
+        $center($vals[$i], $cx[$i], $y_dat0, $cx[$i+1], $y_dat1, $font, $sz_data, $c_text_data);
     }
 
     // Footer row
-    imagefilledrectangle($img, $tL, $y_ftr0, $tR, $y_ftr1, $c_data);
+    imagefilledrectangle($img, $tL, $y_ftr0, $tR, $y_ftr1, $c_footer);
     imagerectangle($img, $tL, $y_ftr0, $tR, $y_ftr1, $c_border);
     if ($custom !== '') {
-        $center($custom, $tL, $y_ftr0, $tR, $y_ftr1, $font, $sz_footer, $c_text);
+        $center($custom, $tL, $y_ftr0, $tR, $y_ftr1, $font, $sz_footer, $c_text_data);
     }
 }
 

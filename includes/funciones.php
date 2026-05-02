@@ -129,6 +129,9 @@ function default_template(): array {
         'grid_draw'  => false,
         'grid_color' => '#ffffff',
         'grid_alpha' => 50,
+        'qsl_preset' => 'classic',
+        'qsl_pos'    => 'bc',
+        'qsl_alpha'  => 0,
         'fields' => [
             'CALL'       => ['visible'=>true,  'x'=>540, 'y'=>180, 'size'=>52, 'color'=>'#ffffff', 'font'=>'roboto-bold',  'align'=>'center', 'prefix'=>''],
             'QSO_DATE'   => ['visible'=>true,  'x'=>100, 'y'=>300, 'size'=>22, 'color'=>'#ffffff', 'font'=>'roboto',       'align'=>'left',   'prefix'=>'Date: '],

@@ -129,6 +129,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $gc = $_POST['grid_color'] ?? '';
     if (preg_match('/^#[0-9a-fA-F]{6}$/', $gc)) $tpl['grid_color'] = $gc;
     $tpl['grid_alpha'] = max(10, min(90, (int)($_POST['grid_alpha'] ?? 50)));
+    $pk = $_POST['qsl_preset'] ?? '';
+    if (array_key_exists($pk, qsl_table_presets())) $tpl['qsl_preset'] = $pk;
+    $posk = $_POST['qsl_pos'] ?? '';
+    if (array_key_exists($posk, qsl_table_positions())) $tpl['qsl_pos'] = $posk;
+    $tpl['qsl_alpha'] = max(0, min(80, (int)($_POST['qsl_alpha'] ?? 0)));
     $_SESSION['gen_template'] = $tpl;
 
     // Save template if requested
@@ -384,6 +389,42 @@ document.getElementById('bg-input').addEventListener('change', function() {
       </div>
     </div>
 
+    <!-- QSL Classic options: preset color + position + transparency -->
+    <?php $saved_preset = $template['qsl_preset'] ?? 'classic'; $saved_pos = $template['qsl_pos'] ?? 'bc'; $saved_qal = (int)($template['qsl_alpha'] ?? 0); ?>
+    <div id="qsl-classic-opts" class="mt-2 p-2 rounded <?= ($template['grid_mode'] ?? 'free') !== 'qsl_classic' ? 'd-none' : '' ?>" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)">
+      <div class="d-flex flex-wrap gap-4 align-items-start">
+        <!-- Color presets -->
+        <div>
+          <div class="small text-muted mb-1"><?= t('lang_switch_code')==='en'?'Style':'Estilo' ?></div>
+          <div class="d-flex flex-wrap gap-1">
+            <?php foreach (['classic'=>['#5a5a5a','#b4c7dc'],'blue'=>['#0f1f3a','#5983b0'],'orange'=>['#2a1400','#e07000'],'green'=>['#1a2a00','#6cb800'],'brown'=>['#1a0a00','#784b04'],'grey'=>['#222222','#a0a0a0']] as $pk=>[$ct,$ch]): ?>
+            <button type="button" class="qsl-preset-btn <?= $saved_preset===$pk?'active':'' ?>" data-preset="<?= $pk ?>"
+              style="background:linear-gradient(to bottom,<?= $ct ?> 45%,<?= $ch ?> 45%)"
+              onclick="setQslPreset('<?= $pk ?>')" title="<?= ucfirst($pk) ?>"></button>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <!-- Position grid -->
+        <div>
+          <div class="small text-muted mb-1"><?= t('lang_switch_code')==='en'?'Position':'Posición' ?></div>
+          <div style="display:grid;grid-template-columns:repeat(3,30px);gap:3px">
+            <?php foreach (['tl'=>'↖','tc'=>'↑','tr'=>'↗','bl'=>'↙','bc'=>'↓','br'=>'↘'] as $pk=>$icon): ?>
+            <button type="button" class="qsl-pos-btn <?= $saved_pos===$pk?'active':'' ?>" data-pos="<?= $pk ?>" onclick="setQslPos('<?= $pk ?>')" title="<?= $pk ?>"><?= $icon ?></button>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <!-- Transparency -->
+        <div>
+          <div class="small text-muted mb-1"><?= t('lang_switch_code')==='en'?'Transparency':'Transparencia' ?> <span id="qsl_alpha_lbl"><?= $saved_qal ?>%</span></div>
+          <input type="range" name="qsl_alpha" id="qsl_alpha_input" min="0" max="80" value="<?= $saved_qal ?>"
+            form="design-form" class="form-range" style="width:120px"
+            oninput="document.getElementById('qsl_alpha_lbl').textContent=this.value+'%';triggerPreview()">
+        </div>
+      </div>
+      <input type="hidden" name="qsl_preset" id="qsl_preset_input" value="<?= h($saved_preset) ?>" form="design-form">
+      <input type="hidden" name="qsl_pos"    id="qsl_pos_input"    value="<?= h($saved_pos) ?>"    form="design-form">
+    </div>
+
     <!-- Warnings validación -->
     <div id="step2-warnings" class="mt-3 d-none"></div>
   </div>
@@ -441,6 +482,19 @@ document.getElementById('bg-input').addEventListener('change', function() {
 }
 .grid-move-handle:hover { background: #f59e0b; }
 .grid-move-handle.dragging { cursor: grabbing !important; }
+/* ── QSL classic controls ── */
+.qsl-preset-btn {
+  width:36px;height:26px;border:2px solid rgba(255,255,255,.25);border-radius:4px;
+  cursor:pointer;padding:0;transition:border-color .15s;flex-shrink:0;
+}
+.qsl-preset-btn.active { border-color:#f59e0b !important; }
+.qsl-preset-btn:hover  { border-color:rgba(255,255,255,.65); }
+.qsl-pos-btn {
+  background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);
+  border-radius:3px;cursor:pointer;padding:4px 0;font-size:13px;text-align:center;line-height:1;
+}
+.qsl-pos-btn.active { background:rgba(245,158,11,.6);border-color:#f59e0b; }
+.qsl-pos-btn:hover  { background:rgba(255,255,255,.2); }
 /* ── Guías de snap ── */
 .snap-guide { position: absolute; opacity: 0; pointer-events: none; transition: opacity .08s; z-index: 50; }
 .snap-guide-v { top: 0; bottom: 0; width: 1px; background: #f59e0b; }
@@ -450,9 +504,28 @@ document.getElementById('bg-input').addEventListener('change', function() {
 let previewTimer;
 let isDragging = false;
 let gridMode   = 'free';
+let qslPreset  = '<?= h($template['qsl_preset'] ?? 'classic') ?>';
+let qslPos     = '<?= h($template['qsl_pos']    ?? 'bc') ?>';
 let dragState  = null;
 let showGrid   = true;
 const SNAP_PX  = 8;
+
+const QSL_POSITIONS = {
+  bc:{tL:0.03,tR:0.97,yTop:0.65,yBot:0.98},
+  bl:{tL:0.02,tR:0.60,yTop:0.65,yBot:0.98},
+  br:{tL:0.40,tR:0.98,yTop:0.65,yBot:0.98},
+  tc:{tL:0.03,tR:0.97,yTop:0.02,yBot:0.35},
+  tl:{tL:0.02,tR:0.60,yTop:0.02,yBot:0.35},
+  tr:{tL:0.40,tR:0.98,yTop:0.02,yBot:0.35},
+};
+const QSL_PRESET_COLORS = {
+  classic:['#5a5a5a','#b4c7dc','#dee6ef'],
+  blue:   ['#0f1f3a','#5983b0','#d0dff0'],
+  orange: ['#2a1400','#e07000','#fff0d8'],
+  green:  ['#1a2a00','#6cb800','#e0f0a0'],
+  brown:  ['#1a0a00','#784b04','#ffe8c0'],
+  grey:   ['#222222','#a0a0a0','#e0e0e0'],
+};
 
 // Posiciones predefinidas [fracción_x, fracción_y, alineación_opcional]
 // grid_h: indicativo grande centrado arriba + tabla de datos al pie (estilo QSL clásica)
@@ -546,9 +619,27 @@ function setLayoutMode(mode) {
   const modeInput = document.getElementById('grid_mode_input');
   if (modeInput) modeInput.value = mode;
   const gridOpts = document.getElementById('grid-draw-opts');
-  // qsl_classic draws its own table — no need for the generic grid draw options
   if (gridOpts) gridOpts.classList.toggle('d-none', mode === 'free' || mode === 'qsl_classic');
+  const qslOpts = document.getElementById('qsl-classic-opts');
+  if (qslOpts) qslOpts.classList.toggle('d-none', mode !== 'qsl_classic');
   if (mode !== 'free') applyGridPreset(mode);
+  buildDragOverlay();
+  triggerPreview();
+}
+
+function setQslPreset(key) {
+  qslPreset = key;
+  const inp = document.getElementById('qsl_preset_input');
+  if (inp) inp.value = key;
+  document.querySelectorAll('.qsl-preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === key));
+  drawGridOverlay();
+  triggerPreview();
+}
+function setQslPos(key) {
+  qslPos = key;
+  const inp = document.getElementById('qsl_pos_input');
+  if (inp) inp.value = key;
+  document.querySelectorAll('.qsl-pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === key));
   buildDragOverlay();
   triggerPreview();
 }
@@ -593,8 +684,8 @@ function buildDragOverlay() {
   const scaleX = img.naturalWidth  / img.offsetWidth;
   const scaleY = img.naturalHeight / img.offsetHeight;
 
-  // Handle de grilla (mueve todos los campos a la vez)
-  if (gridMode !== 'free') {
+  // Handle de grilla (mueve todos los campos a la vez) — no aplica en qsl_classic (posición por preset)
+  if (gridMode !== 'free' && gridMode !== 'qsl_classic') {
     const gh = document.createElement('div');
     gh.className = 'grid-move-handle';
     gh.innerHTML = '&#x2838; ' + (gridMode === 'grid_h' ? 'Grilla H' : 'Grilla V');
@@ -688,18 +779,21 @@ function drawGridOverlay() {
     mkLine(tL, rY[2], tR, rY[2], false, true);
 
   } else if (gridMode === 'qsl_classic') {
-    const tL = .03*W, tR = .97*W, tW = tR - tL;
-    const cHeader = 'rgba(180,199,220,.85)';
-    const cData   = 'rgba(222,230,239,.85)';
-    const cBorder = 'rgba(106,138,170,1)';
-    mkFill(tL, .65*H, tW, (.73-.65)*H, cHeader, cBorder);  // title
-    mkFill(tL, .73*H, tW, (.82-.73)*H, cHeader, cBorder);  // header
-    mkFill(tL, .82*H, tW, (.91-.82)*H, cData,   cBorder);  // data
-    mkFill(tL, .91*H, tW, (.98-.91)*H, cData,   cBorder);  // footer
-    const colW = tW / 7;
-    for (let i = 1; i < 7; i++) {
-      mkLine(tL + i*colW, .73*H, tL + i*colW, .91*H, false, false);
-    }
+    const p = QSL_POSITIONS[qslPos] || QSL_POSITIONS.bc;
+    const cX1 = p.tL*W, cX2 = p.tR*W, cW = cX2-cX1;
+    const cY1 = p.yTop*H, cY2 = p.yBot*H, cH = cY2-cY1;
+    const pc   = QSL_PRESET_COLORS[qslPreset] || QSL_PRESET_COLORS.classic;
+    const hexToRgba = (h,a) => { const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; };
+    const cTitle  = hexToRgba(pc[0], .88);
+    const cHeader = hexToRgba(pc[1], .88);
+    const cData   = hexToRgba(pc[2], .88);
+    const cBorder = 'rgba(80,80,80,.7)';
+    mkFill(cX1, cY1,            cW, cH*.24, cTitle,  cBorder);
+    mkFill(cX1, cY1+cH*.24,     cW, cH*.27, cHeader, cBorder);
+    mkFill(cX1, cY1+cH*.51,     cW, cH*.27, cData,   cBorder);
+    mkFill(cX1, cY1+cH*.78,     cW, cH*.22, cData,   cBorder);
+    const colW = cW/7;
+    for (let i=1;i<7;i++) mkLine(cX1+i*colW, cY1+cH*.24, cX1+i*colW, cY1+cH*.78, false, false);
 
   } else if (gridMode === 'grid_v') {
     // Línea separadora bajo el indicativo
@@ -841,9 +935,12 @@ function showGuides(guides, overlay) {
 
 window.addEventListener('resize', buildDragOverlay);
 document.getElementById('design-form').addEventListener('input', triggerPreview);
-// Restore saved grid mode when returning to design step with a saved template
+// Restore saved grid mode and qsl-classic state when returning to step with a saved template
 const _initMode = document.getElementById('grid_mode_input')?.value || 'free';
 if (_initMode !== 'free') setLayoutMode(_initMode);
+// Sync qsl state from PHP-rendered values (already set as JS vars at top)
+document.querySelectorAll('.qsl-preset-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === qslPreset));
+document.querySelectorAll('.qsl-pos-btn').forEach(b => b.classList.toggle('active', b.dataset.pos === qslPos));
 loadPreview();
 
 document.getElementById('design-form').addEventListener('submit', function(e) {

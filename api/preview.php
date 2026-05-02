@@ -34,6 +34,11 @@ $template['grid_draw']  = !empty($_POST['grid_draw']);
 $gcolor = $_POST['grid_color'] ?? '';
 if (preg_match('/^#[0-9a-fA-F]{6}$/', $gcolor)) $template['grid_color'] = $gcolor;
 $template['grid_alpha'] = max(10, min(90, (int)($_POST['grid_alpha'] ?? $template['grid_alpha'] ?? 50)));
+$pk = $_POST['qsl_preset'] ?? '';
+if (array_key_exists($pk, qsl_table_presets())) $template['qsl_preset'] = $pk;
+$posk = $_POST['qsl_pos'] ?? '';
+if (array_key_exists($posk, qsl_table_positions())) $template['qsl_pos'] = $posk;
+$template['qsl_alpha'] = max(0, min(80, (int)($_POST['qsl_alpha'] ?? $template['qsl_alpha'] ?? 0)));
 
 $_SESSION['gen_template'] = $template;
 $out = generate_preview($bg, $qso, $template);
