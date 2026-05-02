@@ -35,6 +35,7 @@ $gcolor = $_POST['grid_color'] ?? '';
 if (preg_match('/^#[0-9a-fA-F]{6}$/', $gcolor)) $template['grid_color'] = $gcolor;
 $template['grid_alpha'] = max(10, min(90, (int)($_POST['grid_alpha'] ?? $template['grid_alpha'] ?? 50)));
 
+$_SESSION['gen_template'] = $template;
 $out = generate_preview($bg, $qso, $template);
 if (!$out) { echo json_encode(['ok'=>false,'error'=>t('err_generate')]); exit; }
 

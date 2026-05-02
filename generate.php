@@ -363,23 +363,23 @@ document.getElementById('bg-input').addEventListener('change', function() {
     </div>
 
     <!-- Opciones de grilla en la tarjeta final -->
-    <input type="hidden" name="grid_mode" id="grid_mode_input" value="free">
+    <input type="hidden" name="grid_mode" id="grid_mode_input" value="<?= h($template['grid_mode'] ?? 'free') ?>" form="design-form">
     <div id="grid-draw-opts" class="mt-2 p-2 rounded d-none" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)">
       <div class="d-flex align-items-center flex-wrap gap-3">
         <div class="form-check mb-0">
-          <input class="form-check-input" type="checkbox" name="grid_draw" id="grid_draw" value="1" onchange="triggerPreview()">
+          <input class="form-check-input" type="checkbox" name="grid_draw" id="grid_draw" value="1" form="design-form" <?= !empty($template['grid_draw']) ? 'checked' : '' ?> onchange="triggerPreview()">
           <label class="form-check-label small" for="grid_draw">
             <?= t('lang_switch_code')==='en' ? 'Draw grid on final card' : 'Dibujar grilla en la tarjeta' ?>
           </label>
         </div>
         <div class="d-flex align-items-center gap-2">
           <label class="form-label small mb-0"><?= t('lang_switch_code')==='en'?'Color':'Color' ?></label>
-          <input type="color" name="grid_color" id="grid_color" value="#ffffff" class="form-control form-control-color p-0 border-0" style="width:28px;height:28px;cursor:pointer" oninput="triggerPreview()">
+          <input type="color" name="grid_color" id="grid_color" value="<?= h($template['grid_color'] ?? '#ffffff') ?>" class="form-control form-control-color p-0 border-0" style="width:28px;height:28px;cursor:pointer" form="design-form" oninput="triggerPreview()">
         </div>
         <div class="d-flex align-items-center gap-2">
           <label class="form-label small mb-0"><?= t('lang_switch_code')==='en'?'Opacity':'Opacidad' ?></label>
-          <input type="range" name="grid_alpha" id="grid_alpha" min="10" max="90" value="50" class="form-range" style="width:80px" oninput="document.getElementById('grid_alpha_val').textContent=this.value+'%';triggerPreview()">
-          <span id="grid_alpha_val" class="small text-muted">50%</span>
+          <input type="range" name="grid_alpha" id="grid_alpha" min="10" max="90" value="<?= (int)($template['grid_alpha'] ?? 50) ?>" class="form-range" style="width:80px" form="design-form" oninput="document.getElementById('grid_alpha_val').textContent=this.value+'%';triggerPreview()">
+          <span id="grid_alpha_val" class="small text-muted"><?= (int)($template['grid_alpha'] ?? 50) ?>%</span>
         </div>
       </div>
     </div>
@@ -841,6 +841,9 @@ function showGuides(guides, overlay) {
 
 window.addEventListener('resize', buildDragOverlay);
 document.getElementById('design-form').addEventListener('input', triggerPreview);
+// Restore saved grid mode when returning to design step with a saved template
+const _initMode = document.getElementById('grid_mode_input')?.value || 'free';
+if (_initMode !== 'free') setLayoutMode(_initMode);
 loadPreview();
 
 document.getElementById('design-form').addEventListener('submit', function(e) {
