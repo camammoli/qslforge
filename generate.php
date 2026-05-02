@@ -603,9 +603,14 @@ function buildDragOverlay() {
     overlay.appendChild(gh);
   }
 
+  const tableOwned = gridMode === 'qsl_classic'
+    ? ['CALL','NAME','QSO_DATE','TIME_ON','FREQ','BAND','RST_SENT','MODE','CUSTOM']
+    : [];
+
   // Handles individuales por campo
   document.querySelectorAll('input[name^="vis_"]:checked').forEach(cb => {
     const field  = cb.name.replace('vis_', '');
+    if (tableOwned.includes(field)) return;
     const xInput = document.querySelector('[name="x_' + field + '"]');
     const yInput = document.querySelector('[name="y_' + field + '"]');
     if (!xInput || !yInput) return;

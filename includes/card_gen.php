@@ -53,20 +53,27 @@ function draw_qsl_classic_table($img, int $W, int $H, array $qso, array $templat
     $sz_data   = max(12, (int)($H * .024));
     $sz_footer = max(10, (int)($H * .018));
 
+    // &$img: pass by reference so drawing inside the closure affects the actual image
     $center = function($text, $x1, $y1, $x2, $y2, $ffile, $sz, $col)
-        use ($img, $has_ttf) {
+        use (&$img, $has_ttf) {
         if ((string)$text === '') return;
         $mx = (int)(($x1 + $x2) / 2);
         $my = (int)(($y1 + $y2) / 2);
+        $drawn = false;
         if ($has_ttf && function_exists('imagettfbbox')) {
-            $box = imagettfbbox($sz, 0, $ffile, $text);
-            $tw  = abs($box[4] - $box[0]);
-            $th  = abs($box[5] - $box[1]);
-            imagettftext($img, $sz, 0, $mx - (int)($tw/2), $my + (int)($th/2), $col, $ffile, $text);
-        } else {
+            $box = @imagettfbbox($sz, 0, $ffile, $text);
+            if ($box !== false) {
+                $tw = abs($box[4] - $box[0]);
+                $th = abs($box[5] - $box[1]);
+                imagettftext($img, $sz, 0, $mx - (int)($tw/2), $my + (int)($th/2), $col, $ffile, $text);
+                $drawn = true;
+            }
+        }
+        if (!$drawn) {
             $fn = min(5, max(1, (int)round($sz / 9)));
-            imagestring($img, $fn, $mx - (int)(strlen($text)*imagefontwidth($fn)/2),
-                $my - (int)(imagefontheight($fn)/2), $text, $col);
+            $fw = imagefontwidth($fn);
+            $fh = imagefontheight($fn);
+            imagestring($img, $fn, $mx - (int)(strlen($text)*$fw/2), $my - (int)($fh/2), $text, $col);
         }
     };
 
