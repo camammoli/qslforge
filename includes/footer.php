@@ -11,7 +11,8 @@
       <a href="<?= APP_URL ?>/" class="text-muted text-decoration-none me-3"><?= t('nav_home') ?></a>
       <a href="<?= APP_URL ?>/generate.php" class="text-muted text-decoration-none me-3"><?= t('nav_generate') ?></a>
       <a href="#" class="text-muted text-decoration-none me-3" data-bs-toggle="modal" data-bs-target="#modalBugReport"><i class="bi bi-bug me-1"></i><?= t('footer_bug') ?></a>
-      <a href="?lang=<?= t('lang_switch_code') ?>" class="text-muted text-decoration-none"><?= t('lang_switch') ?></a>
+      <a href="?lang=<?= t('lang_switch_code') ?>" class="text-muted text-decoration-none me-3"><?= t('lang_switch') ?></a>
+      <a href="https://cafecito.app/mammoli" class="text-muted text-decoration-none" target="_blank" rel="noopener">☕ Cafecito</a>
     </span>
   </div>
 </footer>
