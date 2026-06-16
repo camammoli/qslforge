@@ -10,6 +10,14 @@ $_flashes = get_flashes();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= isset($page_title) ? h($page_title) . ' — ' : '' ?><?= APP_NAME ?></title>
+  <?php if (!empty($noindex)): ?><meta name="robots" content="noindex, nofollow"><?php endif; ?>
+  <?php if (!empty($meta_description)): ?><meta name="description" content="<?= h($meta_description) ?>"><?php endif; ?>
+  <?php if (empty($noindex)): ?>
+  <link rel="alternate" hreflang="es" href="<?= APP_URL ?>/?lang=es">
+  <link rel="alternate" hreflang="en" href="<?= APP_URL ?>/?lang=en">
+  <link rel="alternate" hreflang="x-default" href="<?= APP_URL ?>/">
+  <?php endif; ?>
+  <?php if (!empty($json_ld)): ?><script type="application/ld+json"><?= json_encode($json_ld, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?></script><?php endif; ?>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/app.css">

@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (PDOException $e) { $error = t('err_login'); }
 }
 
+$noindex = true;
 require_once __DIR__ . '/../includes/header.php';
 ?>
 <div class="row justify-content-center">

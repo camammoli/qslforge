@@ -1,6 +1,19 @@
 <?php
 require_once __DIR__ . '/config.php';
 $page_title = t('hero_title');
+$meta_description = 'QSLForge — free online QSL card generator for amateur radio operators. Upload your ADIF log, customize your card design, and download or email QSLs in seconds.';
+$json_ld = [
+    '@context'            => 'https://schema.org',
+    '@type'               => 'WebApplication',
+    'name'                => 'QSLForge',
+    'url'                 => 'https://mammoli.ar/qslforge/',
+    'description'         => 'Free online QSL card generator for amateur radio operators. Create, customize and send QSL cards from your ADIF log.',
+    'applicationCategory' => 'UtilitiesApplication',
+    'operatingSystem'     => 'Web',
+    'inLanguage'          => ['es', 'en'],
+    'offers'              => ['@type'=>'Offer','price'=>'0','priceCurrency'=>'USD'],
+    'author'              => ['@type'=>'Person','name'=>'Carlos Mammoli','url'=>'https://mammoli.ar/'],
+];
 require_once __DIR__ . '/includes/header.php';
 ?>
 

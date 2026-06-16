@@ -173,3 +173,14 @@ e79f136 — fix(qsl_classic): table cells empty + table-owned handles still visi
 - `admin/index.php` — estadísticas de uso
 - Preview drag & drop mejorado (v2: mover campos con mouse sobre la imagen en tiempo real)
 - Decidir cuándo hacer el repo público (open source)
+
+---
+
+## SEO — 2026-06-15/16 (Claude Code)
+
+### Lo que se hizo
+- `includes/header.php`: noindex/nofollow condicional (`$noindex`), meta description dinámica
+  (`$meta_description`), hreflang ES/EN/x-default, JSON-LD condicional (`$json_ld`)
+- `account/login.php` + `account/register.php`: `$noindex = true` — Google no los indexa
+- `index.php`: meta description descriptiva con keywords + JSON-LD `WebApplication` (precio gratis,
+  idiomas ES/EN, categoría UtilitiesApplication)
