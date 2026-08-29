@@ -184,3 +184,48 @@ e79f136 — fix(qsl_classic): table cells empty + table-owned handles still visi
 - `account/login.php` + `account/register.php`: `$noindex = true` — Google no los indexa
 - `index.php`: meta description descriptiva con keywords + JSON-LD `WebApplication` (precio gratis,
   idiomas ES/EN, categoría UtilitiesApplication)
+
+## Anti-spam en registro — 2026-08-29 (Claude Code)
+
+**Contexto:** auditoría general de Carlos sobre todos sus formularios públicos
+contra el checklist estándar (`feedback_estandar_formularios_contacto`,
+2026-08-20). `account/register.php` era el segundo más urgente de todos —
+sin ninguna protección Y sin aprobación manual (login inmediato tras
+registrarse), a diferencia de QSL Manager o Alerta SOS que al menos mitigan
+con aprobación manual.
+
+**Agregado**, mismo patrón que mammoli.ar raíz / Finca / LU2MCA / Tienda de
+Juan:
+- Honeypot: campo `callsign2` oculto con la clase `.cf-hp` (off-screen, no
+  `display:none`) en el form, verificado en el POST.
+- Trampa de tiempo: `$_SESSION['reg_ts']` se pisa cada vez que se
+  (re)muestra el formulario (carga inicial o tras un error real); el POST
+  rechaza si pasaron menos de 2s.
+- Rate limit: 5 registros por IP por hora, archivo temporal JSON (mismo
+  patrón sin DB que el resto de los sitios) — clave `qslf_registro_<ip>`.
+- Honeypot/trampa de tiempo disparados → éxito fingido (mismo flash message
+  y redirect que un registro real, pero no se crea ninguna cuenta) — no
+  darle feedback útil a un bot sobre qué filtro lo frenó. Rate limit
+  superado → error real y visible (`err_rate_limit`, agregado a
+  `includes/i18n/es.php` y `en.php`).
+
+**Validado en producción** (no se pudo levantar un servidor local con
+MySQL — `php-portable` no tiene `pdo_mysql` y `DB_HOST` es `localhost`,
+solo accesible desde el propio hosting; se probó contra producción real,
+con backup previo de los 4 archivos tocados):
+- Honeypot lleno → redirect 302 (mismo comportamiento que un éxito real),
+  confirmado sin cuenta creada intentando loguearse después (login devuelve
+  "Invalid email or password").
+- Envío instantáneo → mismo resultado, sin cuenta creada.
+- Registro legítimo con espera → cuenta creada de verdad, login posterior
+  funciona.
+- Rate limit **no probado en vivo** (para no dejar 5+ cuentas de prueba en
+  producción) — la lógica es idéntica a la ya validada en Tienda de Juan,
+  se confía en el patrón sin repetir la prueba destructiva acá.
+
+**Nota:** quedó una cuenta de prueba real en producción,
+`claude.test.antispam@example.com` (callsign `CLTEST3`) — se puede borrar
+a mano desde phpMyAdmin/cPanel si se quiere, no molesta si se deja.
+
+**Deploy**: `account/register.php`, `assets/css/app.css`,
+`includes/i18n/es.php`, `includes/i18n/en.php`.

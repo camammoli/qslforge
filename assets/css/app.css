@@ -25,3 +25,14 @@ input[type=color].form-control-color { min-width: 100%; }
 @media (max-width: 991px) {
   #preview-img { max-height: 280px; object-fit: contain; }
 }
+
+/* Honeypot anti-spam: oculto fuera de pantalla, nunca display:none (un bot
+   con navegador headless lo detecta como truco demasiado fácil). */
+.cf-hp {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

@@ -127,6 +127,7 @@
     'err_pass_short'    => 'La contraseña debe tener al menos 6 caracteres.',
     'err_call_required' => 'El indicativo es obligatorio.',
     'err_email_taken'   => 'Ese email ya está registrado.',
+    'err_rate_limit'     => 'Demasiados registros en poco tiempo. Probá de nuevo en un rato.',
     'err_login'         => 'Email o contraseña incorrectos.',
     'err_session'       => 'La sesión expiró. Comenzá de nuevo.',
     'err_generate'      => 'Error al generar las tarjetas. Intentá de nuevo.',

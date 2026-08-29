@@ -137,6 +137,7 @@
     'err_pass_short'    => 'Password must be at least 6 characters.',
     'err_call_required' => 'Callsign is required.',
     'err_email_taken'   => 'That email is already registered.',
+    'err_rate_limit'     => 'Too many registrations in a short time. Please try again in a while.',
     'err_login'         => 'Invalid email or password.',
     'err_session'       => 'Session expired. Please start again.',
     'err_generate'      => 'Error generating cards. Please try again.',
