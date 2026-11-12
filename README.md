@@ -1,5 +1,7 @@
 # QSLforge
 
+[![Archivado en Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/camammoli/qslforge/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/camammoli/qslforge)
+
 **Free QSL card generator for amateur radio operators.**
 
 Upload your ADIF log, design your card, download a ZIP or send each card directly by email to every OM — no account required.
